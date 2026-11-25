@@ -1,0 +1,2591 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏃</text></svg>">
+<title>避難シミュレーション - 大型商業施設モバイル版</title>
+<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+<style>
+  :root {
+    --primary: #00e676;
+    --danger: #ff3d00;
+    --warning: #ffea00;
+    --info: #00b0ff;
+    --bg-glass: rgba(12, 18, 28, 0.88);
+    --border-glass: 1px solid rgba(255, 255, 255, 0.2);
+    --safe-top: env(safe-area-inset-top, 6px);
+    --safe-bottom: env(safe-area-inset-bottom, 8px);
+    --safe-left: env(safe-area-inset-left, 16px);
+    --safe-right: env(safe-area-inset-right, 16px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; touch-action: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Segoe UI', Roboto, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    background-color: #050811;
+  }
+  /* VRモードUI・センサー許可ダイアログ完全非表示 */
+  .a-enter-vr, .a-enter-ar, .a-enter-vr-button, .a-orientation-modal, .a-dialog, .a-dialog-container, .a-dialog-wrapper, .a-permission-modal {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+  /* 画面切り替え共通 */
+  .screen-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 1000; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: calc(var(--safe-top) + 6px) calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 8px) calc(var(--safe-left) + 12px);
+    background: radial-gradient(circle at center, rgba(16, 25, 42, 0.94) 0%, rgba(6, 10, 18, 0.98) 100%);
+    color: #fff; transition: opacity 0.25s ease, visibility 0.25s;
+    overflow-y: auto;
+  }
+  .hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+  }
+
+  /* 縦画面時の横向き案内バナー */
+  .portrait-only-banner {
+    display: none;
+    position: absolute; top: calc(var(--safe-top) + 6px); left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, #ff9100, #ff3d00); color: #fff; font-weight: 800;
+    font-size: clamp(12px, 2.5vw, 14px); padding: 6px 16px; border-radius: 20px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.6); z-index: 9999; pointer-events: none;
+    letter-spacing: 0.5px; white-space: nowrap;
+  }
+  @media (orientation: portrait) {
+    .portrait-only-banner { display: block; }
+  }
+
+  /* 1. タイトル＆スタート画面レイアウト */
+  .title-content {
+    width: 100%; max-width: 860px;
+    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+    gap: 24px; text-align: left;
+  }
+  .title-col-left {
+    flex: 1.25; display: flex; flex-direction: column; align-items: flex-start;
+  }
+  .title-col-right {
+    flex: 0.85; display: flex; flex-direction: column; align-items: stretch;
+  }
+  .badge-tag {
+    background: linear-gradient(135deg, #ff3d00, #ff9100);
+    color: white; font-size: clamp(11px, 2.2vw, 13px); font-weight: 800;
+    padding: 4px 12px; border-radius: 20px; letter-spacing: 1.5px;
+    margin-bottom: 6px; box-shadow: 0 0 12px rgba(255, 61, 0, 0.4);
+  }
+  .title-main {
+    font-size: clamp(24px, 5.2vw, 38px); font-weight: 900;
+    margin: 0 0 6px 0; letter-spacing: 0.8px;
+    background: linear-gradient(180deg, #ffffff 40%, #e0e0e0 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .title-desc {
+    font-size: clamp(13px, 2.8vw, 16.5px); color: #b0bec5; margin-bottom: 12px; line-height: 1.4;
+    font-weight: 600;
+  }
+  .card-box {
+    background: rgba(255, 255, 255, 0.07);
+    border: var(--border-glass); border-radius: 14px;
+    padding: 12px 16px; text-align: left; font-size: clamp(12.5px, 2.6vw, 15px); line-height: 1.6;
+    color: #e0e0e0; width: 100%; backdrop-filter: blur(10px);
+  }
+  .card-box strong { color: #ffffff; }
+  .btn-stack {
+    display: flex; flex-direction: column; gap: 10px; width: 100%;
+  }
+  /* 超大型スタートボタン（最高峰の押しやすさ・迫力の視認性） */
+  .btn-start-hero {
+    appearance: none; -webkit-appearance: none;
+    border: 2.5px solid rgba(255, 255, 255, 0.6); outline: none; cursor: pointer;
+    background: linear-gradient(135deg, #00e676 0%, #00b0ff 55%, #0091ea 100%);
+    color: #021a0a;
+    font-size: clamp(19px, 4.2vw, 26px);
+    font-weight: 900;
+    letter-spacing: 0.8px;
+    padding: clamp(16px, 3.6vh, 22px) clamp(20px, 4vw, 32px);
+    border-radius: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    min-height: clamp(66px, 12vh, 88px);
+    box-shadow: 0 8px 28px rgba(0, 230, 118, 0.55), 0 3px 12px rgba(0, 0, 0, 0.6);
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    animation: heroBtnPulse 2s infinite ease-in-out;
+    transition: transform 0.1s ease, filter 0.1s ease;
+  }
+  .btn-start-hero:active {
+    transform: scale(0.96) !important;
+    filter: brightness(1.15);
+    box-shadow: 0 4px 16px rgba(0, 230, 118, 0.7);
+  }
+  @keyframes heroBtnPulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 6px 26px rgba(0, 230, 118, 0.45), 0 0 16px rgba(0, 176, 255, 0.35);
+      border-color: rgba(255, 255, 255, 0.6);
+    }
+    50% {
+      transform: scale(1.025);
+      box-shadow: 0 10px 36px rgba(0, 230, 118, 0.8), 0 0 28px rgba(0, 176, 255, 0.65);
+      border-color: #ffffff;
+    }
+  }
+  .btn-start-subtext {
+    font-size: clamp(11.5px, 2.3vw, 13.5px);
+    font-weight: 800;
+    color: rgba(2, 26, 10, 0.85);
+    letter-spacing: 0.5px;
+  }
+  .ui-btn {
+    appearance: none; border: none; outline: none; cursor: pointer;
+    padding: 14px 20px; font-size: clamp(15px, 3.2vw, 18px); font-weight: 800; border-radius: 28px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.45); transition: transform 0.1s, filter 0.1s;
+    touch-action: manipulation;
+  }
+  .ui-btn:active { transform: scale(0.97); }
+  .btn-action-primary {
+    background: linear-gradient(135deg, #00e676, #00b0ff); color: #002e12;
+  }
+  .btn-action-secondary {
+    background: rgba(255, 255, 255, 0.12); color: #eceff1;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+  }
+  .mobile-touch-tips {
+    margin-top: 10px; font-size: clamp(11px, 2.2vw, 13px); color: #90a4ae; line-height: 1.4; text-align: center;
+  }
+
+  /* 画面が縦向き（Portrait）の場合のフォールバック */
+  @media (orientation: portrait), (max-width: 620px) {
+    .title-content {
+      flex-direction: column; max-width: 460px; gap: 14px; text-align: center;
+    }
+    .title-col-left {
+      align-items: center;
+    }
+    .title-col-right {
+      width: 100%;
+    }
+    .title-main { font-size: clamp(26px, 7vw, 36px); }
+  }
+
+  /* 2. 操作練習画面 */
+  #tut-floating-card {
+    position: absolute; top: calc(var(--safe-top) + 6px); left: 50%; transform: translateX(-50%);
+    background: var(--bg-glass); border: 2px solid var(--info);
+    border-radius: 14px; padding: 10px 14px; z-index: 500;
+    color: #fff; width: calc(100% - 48px); max-width: 440px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6); backdrop-filter: blur(8px);
+  }
+  .tut-head {
+    font-size: clamp(12.5px, 2.6vw, 14.5px); font-weight: bold; color: var(--info);
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+  }
+  .tut-checklist {
+    list-style: none; margin: 0; padding: 0; font-size: clamp(12px, 2.5vw, 13.5px);
+  }
+  .tut-checklist li {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px; color: #b0bec5;
+  }
+  .tut-checklist li.done { color: var(--primary); font-weight: bold; }
+  .check-icon {
+    width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #546e7a;
+    display: flex; align-items: center; justify-content: center; font-size: 9px;
+  }
+  .tut-checklist li.done .check-icon {
+    background: var(--primary); border-color: var(--primary); color: #000;
+  }
+  #btn-skip-tut {
+    position: absolute; top: calc(var(--safe-top) + 6px); right: calc(var(--safe-right) + 10px); z-index: 550;
+    background: rgba(0, 0, 0, 0.75); color: #eceff1; border: 1px solid #78909c;
+    border-radius: 18px; font-size: 12px; padding: 6px 12px; cursor: pointer; font-weight: 700;
+  }
+  #modal-tut-complete {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: var(--bg-glass); border: 2px solid var(--primary);
+    border-radius: 18px; padding: 18px 22px; text-align: center; color: white;
+    z-index: 600; width: 88%; max-width: 380px; box-shadow: 0 10px 30px rgba(0, 230, 118, 0.35);
+  }
+
+  /* 3. 火災発生アラート＆状況把握画面 */
+  #screen-countdown {
+    background: radial-gradient(circle at center, rgba(70, 12, 12, 0.92) 0%, rgba(6, 8, 16, 0.96) 100%);
+    z-index: 950; text-align: center;
+    padding: calc(var(--safe-top) + 8px) 16px calc(var(--safe-bottom) + 8px) 16px;
+  }
+  .disaster-card {
+    background: rgba(22, 12, 18, 0.94);
+    border: 2px solid #ff3d00;
+    border-radius: 18px;
+    padding: clamp(12px, 2.5vw, 20px) clamp(16px, 3.2vw, 26px);
+    max-width: 520px;
+    width: 92%;
+    box-shadow: 0 0 30px rgba(255, 61, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(12px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    animation: disasterPulse 2s infinite ease-in-out;
+  }
+  @keyframes disasterPulse {
+    0%, 100% { border-color: #ff3d00; box-shadow: 0 0 20px rgba(255, 61, 0, 0.45); }
+    50% { border-color: #ff9100; box-shadow: 0 0 32px rgba(255, 145, 0, 0.65); }
+  }
+  #count-header {
+    font-size: clamp(18px, 3.8vw, 24px); font-weight: 900; color: #ff5252;
+    background: rgba(255, 61, 0, 0.2); border: 1.5px solid #ff3d00;
+    padding: 6px 18px; border-radius: 20px; letter-spacing: 1px;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .disaster-body {
+    width: 100%; text-align: left; font-size: clamp(13px, 2.7vw, 15px); line-height: 1.55;
+    color: #eceff1; display: flex; flex-direction: column; gap: 8px;
+  }
+  .disaster-situation {
+    background: rgba(255, 61, 0, 0.12); border-left: 3px solid #ff5252;
+    padding: 8px 12px; border-radius: 6px;
+  }
+  .disaster-tips {
+    background: rgba(255, 234, 0, 0.1); border-left: 3px solid var(--warning);
+    padding: 8px 12px; border-radius: 6px; color: #fff9c4; font-size: clamp(11.5px, 2.4vw, 13.5px);
+  }
+  .btn-action-danger {
+    background: linear-gradient(135deg, #ff3d00, #ff1744);
+    color: #ffffff;
+    font-size: clamp(15px, 3vw, 17px);
+    padding: 12px 26px;
+    width: 100%;
+    margin-top: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 16px rgba(255, 61, 0, 0.6);
+  }
+
+  /* 4. 本番HUD */
+  #mobile-hud {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 200;
+  }
+  /* 画面上部：スマート避難バー */
+  #ar-nav-bar {
+    position: absolute; top: calc(var(--safe-top) + 4px); left: 50%; transform: translateX(-50%);
+    width: calc(100% - 100px); max-width: 440px;
+    background: var(--bg-glass); border: 2px solid #546e7a;
+    border-radius: 14px; padding: 6px 14px; pointer-events: auto;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.7); backdrop-filter: blur(10px);
+    transition: border-color 0.3s;
+  }
+  #ar-nav-icon {
+    font-size: 28px; font-weight: 900; line-height: 1; color: var(--primary);
+    width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 230, 118, 0.15); border-radius: 10px; margin-right: 10px;
+    transition: all 0.25s ease;
+  }
+  #ar-nav-info {
+    flex: 1; text-align: left; display: flex; flex-direction: column; justify-content: center;
+  }
+  #ar-nav-status {
+    font-size: 11px; font-weight: 800; color: #90a4ae; letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--primary);
+  }
+  #ar-nav-msg {
+    font-size: clamp(13px, 2.8vw, 16.5px); font-weight: 900; color: #fff; line-height: 1.25; margin-top: 2px;
+  }
+  .hud-stats-row {
+    position: absolute; top: calc(var(--safe-top) + 54px);
+    left: calc(var(--safe-left) + 8px); right: calc(var(--safe-right) + 8px);
+    display: flex; justify-content: space-between; align-items: center; pointer-events: none;
+  }
+  .stat-badge {
+    background: rgba(8, 12, 20, 0.88); border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px; padding: 5px 10px; font-size: clamp(12px, 2.4vw, 14px); font-weight: bold; color: #eceff1;
+    display: flex; align-items: center; gap: 4px; box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+  }
+  .stat-badge strong { font-size: clamp(14px, 2.8vw, 17px); color: var(--primary); }
+  .stat-badge.warning {
+    border-color: #ff3d00; background: rgba(40, 10, 10, 0.88);
+  }
+  .stat-badge.warning strong { color: #ff3d00; }
+  #btn-hud-reset {
+    pointer-events: auto; background: rgba(30, 36, 48, 0.85);
+    border: 1px solid #78909c; color: #eee; border-radius: 10px;
+    padding: 5px 10px; font-size: 11.5px; font-weight: bold; cursor: pointer;
+  }
+  /* 右下コントロール */
+  #btn-reset-view {
+    position: absolute; bottom: calc(var(--safe-bottom) + 8px); right: calc(var(--safe-right) + 8px);
+    pointer-events: auto; width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(20, 28, 42, 0.88); border: 1.5px solid rgba(255, 255, 255, 0.35);
+    color: #eceff1; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; z-index: 210;
+  }
+  #btn-reset-view:active { transform: scale(0.9); }
+  /* 全画面トグルボタン */
+  .fs-toggle-btn {
+    appearance: none; border: none; outline: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: rgba(0, 230, 118, 0.15); border: 1.5px solid var(--primary);
+    color: #e0f2f1; border-radius: 20px; padding: 10px 14px; font-size: 13.5px; font-weight: 800;
+    backdrop-filter: blur(8px); box-shadow: 0 4px 14px rgba(0, 230, 118, 0.25);
+    transition: all 0.15s ease; width: 100%; margin-bottom: 8px;
+  }
+  .fs-toggle-btn:active { transform: scale(0.97); background: rgba(0, 230, 118, 0.3); }
+  .fs-toggle-btn.is-fullscreen {
+    background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.35); color: #eceff1;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  #btn-hud-fullscreen {
+    position: absolute; bottom: calc(var(--safe-bottom) + 8px); right: calc(var(--safe-right) + 64px);
+    pointer-events: auto; width: 48px; height: 48px; border-radius: 50%;
+    background: rgba(20, 28, 42, 0.88); border: 1.5px solid rgba(255, 255, 255, 0.35);
+    color: #eceff1; font-size: 20px; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5); cursor: pointer; z-index: 210;
+  }
+  #btn-hud-fullscreen:active { transform: scale(0.9); }
+  /* iOS向け案内トースト */
+  #ios-pwa-toast {
+    position: absolute; top: calc(var(--safe-top) + 8px); left: 50%; transform: translateX(-50%);
+    background: rgba(12, 18, 28, 0.95); border: 1.5px solid #00b0ff; border-radius: 12px;
+    padding: 10px 14px; font-size: 12px; color: #fff; line-height: 1.45;
+    width: calc(100% - 32px); max-width: 440px; z-index: 2000; text-align: left;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.7); backdrop-filter: blur(10px);
+    transition: opacity 0.3s, transform 0.3s;
+  }
+
+  /* スマホ用アナログジョイスティック（360度自由移動） */
+  #joystick-zone {
+    position: absolute; bottom: calc(var(--safe-bottom) + 8px); left: calc(var(--safe-left) + 8px);
+    width: 140px; height: 140px;
+    z-index: 300; pointer-events: auto; touch-action: none;
+    user-select: none; -webkit-user-select: none;
+  }
+  #joystick-base {
+    position: relative; width: 100%; height: 100%; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.15) 0%, rgba(24, 34, 52, 0.65) 65%, rgba(10, 16, 26, 0.88) 100%);
+    border: 2.5px solid rgba(0, 230, 118, 0.45);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.65), inset 0 0 14px rgba(0, 230, 118, 0.15);
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  #joystick-base.active {
+    border-color: rgba(0, 230, 118, 0.95);
+    box-shadow: 0 4px 22px rgba(0, 230, 118, 0.4), inset 0 0 18px rgba(0, 230, 118, 0.3);
+  }
+  #joystick-stick {
+    position: absolute; width: 56px; height: 56px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #ffffff 0%, #b0bec5 50%, #455a64 100%);
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+    pointer-events: none;
+    transform: translate(0px, 0px);
+    transition: transform 0.08s ease-out;
+  }
+  #joystick-base.active #joystick-stick {
+    transition: none;
+    background: radial-gradient(circle at 35% 35%, #e8f5e9 0%, #00e676 55%, #00a152 100%);
+    box-shadow: 0 4px 16px rgba(0, 230, 118, 0.7);
+  }
+  .joystick-guide-arrow {
+    position: absolute; font-size: 11px; color: rgba(255, 255, 255, 0.35);
+    pointer-events: none; font-weight: 900;
+  }
+  .jg-up { top: 6px; }
+  .jg-down { bottom: 6px; }
+  .jg-left { left: 8px; }
+  .jg-right { right: 8px; }
+
+  #swipe-hint {
+    position: absolute; bottom: calc(var(--safe-bottom) + 64px); right: calc(var(--safe-right) + 10px);
+    font-size: 11px; color: rgba(255, 255, 255, 0.75); pointer-events: none;
+    text-align: right; line-height: 1.4;
+  }
+  /* 5. リザルト画面（横画面特化） */
+  .result-sheet {
+    background: rgba(255, 255, 255, 0.06); border: var(--border-glass);
+    border-radius: 18px; padding: 16px 22px; width: 100%; max-width: 720px;
+    text-align: center; backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+    display: flex; flex-direction: row; align-items: center; gap: 20px;
+  }
+  .res-col-left {
+    flex: 0.8; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .res-col-right {
+    flex: 1.2; text-align: left; display: flex; flex-direction: column;
+  }
+  @media (orientation: portrait), (max-width: 620px) {
+    .result-sheet { flex-direction: column; max-width: 420px; gap: 12px; }
+    .res-col-right { text-align: center; }
+  }
+  .rank-circle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 68px; height: 68px; border-radius: 50%; font-size: 40px; font-weight: 900;
+    margin-bottom: 6px; box-shadow: 0 0 20px currentColor;
+  }
+  .rank-s { color: var(--warning); border: 3.5px solid var(--warning); background: rgba(255, 234, 0, 0.15); }
+  .rank-c { color: var(--danger); border: 3.5px solid var(--danger); background: rgba(255, 61, 0, 0.15); }
+  .res-title { font-size: clamp(17px, 3.5vw, 22px); font-weight: 900; margin: 4px 0 10px 0; }
+  .res-group-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: rgba(0, 230, 118, 0.15); border: 1.5px solid #00e676;
+    color: #ffffff; font-weight: 800; font-size: clamp(14px, 2.8vw, 17px);
+    padding: 6px 18px; border-radius: 20px; margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(0, 230, 118, 0.25); letter-spacing: 0.5px;
+  }
+  .res-time-box {
+    background: rgba(0, 0, 0, 0.45); border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 12px; color: #cfd8dc;
+    display: flex; flex-direction: column; gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .time-item {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  }
+  .time-item-stopped {
+    border-top: 1px dashed rgba(255, 255, 255, 0.2);
+    padding-top: 6px;
+  }
+  .time-label {
+    font-size: clamp(12.5px, 2.6vw, 15px); font-weight: 700; color: #b0bec5;
+  }
+  .time-value strong {
+    font-size: clamp(20px, 4.2vw, 26px); color: var(--primary); font-weight: 900;
+  }
+  .time-item-stopped .time-value strong {
+    color: #ffd600;
+  }
+  .res-analysis-card {
+    background: rgba(12, 18, 28, 0.75); border-radius: 12px;
+    padding: 12px 14px; text-align: left; font-size: clamp(12.5px, 2.6vw, 14.5px); line-height: 1.55;
+    color: #e0e0e0; margin-bottom: 16px; border-left: 3.5px solid var(--info);
+  }
+  /* 事後アンケートカード＆ボタン */
+  .survey-card {
+    background: linear-gradient(135deg, rgba(0, 230, 118, 0.12), rgba(0, 176, 255, 0.12));
+    border: 1.5px solid rgba(0, 230, 118, 0.5);
+    border-radius: 14px;
+    padding: clamp(10px, 2.2vh, 14px) clamp(12px, 2.5vw, 16px);
+    margin-bottom: 12px;
+    text-align: center;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  }
+  .survey-title {
+    font-size: clamp(13px, 2.6vw, 15px);
+    font-weight: 800;
+    color: #ffffff;
+    margin-bottom: 4px;
+  }
+  .survey-desc {
+    font-size: clamp(11px, 2.2vw, 12.5px);
+    color: #b0bec5;
+    margin-bottom: 8px;
+    line-height: 1.35;
+  }
+  .btn-survey {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    background: linear-gradient(135deg, #00e676 0%, #00b0ff 100%);
+    color: #021a0a !important;
+    font-weight: 900;
+    font-size: clamp(14px, 2.8vw, 16px);
+    padding: clamp(10px, 2vh, 13px) 18px;
+    border-radius: 24px;
+    text-decoration: none;
+    box-shadow: 0 4px 16px rgba(0, 230, 118, 0.45);
+    transition: transform 0.1s ease, filter 0.1s ease;
+    animation: heroBtnPulse 2.2s infinite ease-in-out;
+  }
+  .btn-survey:active {
+    transform: scale(0.97);
+    filter: brightness(1.1);
+  }
+</style>
+</head>
+<body>
+<!-- 1. タイトル画面 -->
+<div id="screen-title" class="screen-overlay">
+  <!-- 縦向き時に表示される案内バナー -->
+  <div class="portrait-only-banner">
+    🔄 横向きに回転すると快適に操作できます
+  </div>
+
+  <!-- iOS向けPWA案内トースト（Safari用） -->
+  <div id="ios-pwa-toast" class="hidden">
+    ℹ️ <strong>Safariをご利用の方へ:</strong><br>
+    画面下の「共有」ボタン ➔「ホーム画面に追加」をすると、アドレスバーのない完全な全画面アプリとしてプレイできます！
+  </div>
+
+  <div class="title-content">
+    <!-- 左カラム: タイトルと進行フロー -->
+    <div class="title-col-left">
+      <div class="badge-tag">EVACUATION RESEARCH - GROUP B</div>
+      <h1 class="title-main">避難シミュレーション</h1>
+      <div class="title-desc">大型商業施設 災害避難行動実験</div>
+      
+      <div class="card-box">
+        <div style="font-size: 1.08em; font-weight: 900; color: #fff; margin-bottom: 8px;">📍 3ステップ進行フロー</div>
+        <div style="margin-bottom: 8px; color: #f1f2f6;"><strong>① チュートリアル：操作確認</strong></div>
+        <div style="margin-bottom: 8px; color: #f1f2f6;"><strong>② 商業施設内の移動：1Fメインエントランス～2Fの緑のオブジェクトまで移動</strong></div>
+        <div style="color: #f1f2f6;"><strong>③ 避難開始：火災発生！1Fメインエントランスまで移動する</strong></div>
+      </div>
+    </div>
+
+    <!-- 右カラム: アクションボタン群 -->
+    <div class="title-col-right">
+      <div class="btn-stack" style="width: 100%; max-width: 380px;">
+        <button id="btn-start-tut" class="btn-start-hero" type="button">
+          <span>🔰 チュートリアルから開始</span>
+          <span class="btn-start-subtext">▶ タップしてシミュレーションを開始</span>
+        </button>
+      </div>
+      <div class="mobile-touch-tips">
+        ※音が鳴ります（効果音・警報音あり）
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. 操作練習画面 -->
+<button id="btn-skip-tut" class="hidden">STEP②へスキップ ⏩</button>
+<div id="tut-floating-card" class="hidden">
+  <div class="tut-head">
+    <span>🔰 STEP ① : 操作トレーニング</span>
+    <span style="font-size:11px; color:#90a4ae;">ミッション</span>
+  </div>
+  <ul class="tut-checklist">
+    <li id="tut-chk-look">
+      <div class="check-icon">✓</div>
+      <span>① 右手でスワイプして周囲を見渡す（上下左右360°）</span>
+    </li>
+    <li id="tut-chk-move">
+      <div class="check-icon">✓</div>
+      <span>② 左下のアナログスティックで自由に歩く（360°）</span>
+    </li>
+    <li id="tut-chk-reach">
+      <div class="check-icon">✓</div>
+      <span>③ 前方の緑のチェックポイントに入る</span>
+    </li>
+  </ul>
+</div>
+<div id="modal-tut-complete" class="hidden">
+  <div style="font-size: 34px; margin-bottom: 6px;">🎉</div>
+  <h3 style="margin: 0 0 8px 0; color: var(--primary); font-size: 18px;">操作マスター！</h3>
+  <p style="font-size: 13.5px; color: #cfd8dc; margin-bottom: 16px; line-height: 1.5;">
+    基本操作を確認しました。<br>
+    次は<strong>【STEP ②】</strong>です。1階の<strong>「メインエントランス」</strong>から<strong>2階の緑のオブジェクト</strong>まで移動しましょう！
+  </p>
+  <button id="btn-tut-go-main" class="ui-btn btn-action-primary" style="width: 100%; padding: 14px;">
+    🚶 STEP ② : メインエントランス へ進む
+  </button>
+</div>
+
+<!-- 3. 火災発生アラート＆状況把握画面 -->
+<div id="screen-countdown" class="screen-overlay hidden">
+  <div class="disaster-card">
+    <div id="count-header">🚨 火災発生！ (EMERGENCY FIRE)</div>
+    <div class="disaster-body">
+      <div class="disaster-situation">
+        館内で<strong>火災</strong>が発生しました！<br>
+        現在地（2階奥）から、1階の<strong>「メインエントランス」</strong>へ避難してください。
+      </div>
+    </div>
+    <button id="btn-start-evac" class="ui-btn btn-action-danger">
+      🏃 了解・避難を開始する（OK）
+    </button>
+  </div>
+</div>
+
+<!-- 4. 本番HUD -->
+<div id="mobile-hud" class="hidden">
+  <div id="ar-nav-bar">
+    <div id="ar-nav-icon">↑</div>
+    <div id="ar-nav-info">
+      <div id="ar-nav-status">
+        <span class="status-dot" id="ar-status-dot"></span>
+        <span id="ar-nav-badge">AR NAVI ACTIVE</span>
+      </div>
+      <div id="ar-nav-msg">直進してください</div>
+    </div>
+  </div>
+  <div class="hud-stats-row">
+    <div class="stat-badge">
+      <span id="hud-timer-label">TIME:</span>
+      <strong id="hud-timer">0.0s</strong>
+    </div>
+    <div class="stat-badge" id="hud-speed-badge">
+      <span>SPEED:</span>
+      <strong id="hud-speed">1.5m/s</strong>
+    </div>
+    <div class="stat-badge">
+      <span id="hud-dist-label">目的地まで:</span>
+      <strong id="hud-dist">-- m</strong>
+    </div>
+    <button id="btn-hud-reset">リセット</button>
+  </div>
+</div>
+
+<!-- スマホ用バーチャル・アナログジョイスティック（360度自由移動） -->
+<div id="joystick-zone" class="hidden">
+  <div id="joystick-base">
+    <div id="joystick-stick"></div>
+    <div class="joystick-guide-arrow jg-up">▲</div>
+    <div class="joystick-guide-arrow jg-down">▼</div>
+    <div class="joystick-guide-arrow jg-left">◀</div>
+    <div class="joystick-guide-arrow jg-right">▶</div>
+  </div>
+</div>
+
+<!-- 5. リザルト画面（横画面2カラム構成） -->
+<div id="screen-result" class="screen-overlay hidden">
+  <div class="result-sheet">
+    <div class="res-col-left">
+      <div id="res-rank" class="rank-circle rank-s">S</div>
+      <div id="res-title" class="res-title">避難成功！</div>
+      <div id="res-group" class="res-group-badge">あなたのグループ：B</div>
+      <div class="res-time-box">
+        <div class="time-item">
+          <span class="time-label">⏱️ 避難完了タイム:</span>
+          <span class="time-value"><strong id="res-time">0.0秒</strong></span>
+        </div>
+        <div class="time-item time-item-stopped">
+          <span class="time-label">🛑 合計停止時間:</span>
+          <span class="time-value"><strong id="res-stopped-time">0.0秒</strong></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="res-col-right">
+      <div id="res-analysis" class="res-analysis-card hidden"></div>
+
+      <!-- 【要件】事後アンケート案内カード・リンクボタン -->
+      <div class="survey-card">
+        <div class="survey-title">📋 商業施設における避難シミュレーション実験 事後アンケート</div>
+        <div class="survey-desc">実験・シミュレーション改善のため、ご感想・アンケートへのご協力をお願いいたします（所要時間：約1〜2分）</div>
+        <a id="btn-survey-link" href="https://docs.google.com/forms/d/e/1FAIpQLSfxbh8mHL7h1ESB1RklPi3GABvkn2J8xy2fNz0DLTccd-3Tmw/viewform" target="_blank" rel="noopener noreferrer" class="btn-survey">
+          <span>📝 事後アンケートに回答する</span>
+          <span style="font-size: 0.85em; opacity: 0.85;">(別タブで開く ↗)</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 3Dシーン（A-Frame：モバイルGPU負荷軽減・VRモードUIおよびジャイロ許可ダイアログ完全排除） -->
+<a-scene vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false" background="color: #03060c" shadow="enabled: false" renderer="antialias: true; powerPreference: high-performance; maxCanvasWidth: 1920; maxCanvasHeight: 1920;">
+  
+  <a-entity id="player" position="0 -3.4 -34">
+    <!-- 視点制御：タッチ操作はマルチタッチ独立ハンドラで処理（touchEnabled: false）、PC用マウス操作はA-Frameハンドラ（reverseMouseDrag: true） -->
+    <a-camera id="cam" look-controls="touchEnabled: false; reverseMouseDrag: true; magicWindowTrackingEnabled: false;" wasd-controls="enabled: false"></a-camera>
+  </a-entity>
+
+  <!-- A. 操作練習トレーニングルーム -->
+  <a-entity id="tut-stage">
+    <a-plane position="150 0 0" rotation="-90 0 0" width="16" height="16" color="#1a2536"></a-plane>
+    <a-plane position="150 4 0" rotation="90 0 0" width="16" height="16" color="#26354a"></a-plane>
+    <a-box position="150 2 -8" width="16" height="4" depth="0.4" color="#37474f"></a-box>
+    <a-box position="150 2 8" width="16" height="4" depth="0.4" color="#37474f"></a-box>
+    <a-box position="142 2 0" width="0.4" height="4" depth="16" color="#2c3e50"></a-box>
+    <a-box position="158 2 0" width="0.4" height="4" depth="16" color="#2c3e50"></a-box>
+    <a-plane position="150 2.6 -7.7" width="9" height="1.6" color="#0984e3"></a-plane>
+    <a-text value="TRAINING ROOM" position="150 2.9 -7.6" align="center" color="#FFF" scale="2 2 2"></a-text>
+    <a-text value="ENTER THE GREEN CHECKPOINT" position="150 2.3 -7.6" align="center" color="#FFEAA7" scale="1.4 1.4 1.4"></a-text>
+    
+    <a-light type="point" position="150 3.5 0" intensity="0.8" color="#ffffff"></a-light>
+    
+    <a-cylinder position="150 0.05 -3" radius="1.3" height="0.1" color="#00e676" opacity="0.8"></a-cylinder>
+    <a-cylinder position="150 1.5 -3" radius="1.3" height="3" color="#00e676" opacity="0.2" open-ended="true"></a-cylinder>
+    <a-cone position="150 2.5 -3" rotation="180 0 0" radius-bottom="0.35" radius-top="0" height="0.6" color="#ffd600"></a-cone>
+  </a-entity>
+
+  <!-- B. 実在型大型ショッピングモール -->
+  <a-entity id="mall-stage">
+    <!-- スマホWebブラウザ軽量化：多数のPoint Lightを排除し、Ambient + Directional 1灯で全体を均一・高速に照明 -->
+    <a-light type="ambient" color="#ffffff" intensity="0.85"></a-light>
+    <a-light type="directional" position="0.3 1 0.4" color="#fffdf7" intensity="0.35"></a-light>
+
+    <!-- 1. 天井・立体グリッド梁（z: -38.5 〜 35.5 全域をカバー） -->
+    <a-plane position="0 6 -1.5" rotation="90 0 0" width="30" height="74" color="#f1f2f6"></a-plane>
+    <a-box position="0 5.7 30" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+    <a-box position="0 5.7 20" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+    <a-box position="0 5.7 10" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+    <a-box position="0 5.7 0" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+    <a-box position="0 5.7 -10" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+    <a-box position="0 5.7 -20" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+    <a-box position="0 5.7 -30" width="28" height="0.6" depth="0.8" color="#dcdde1"></a-box>
+
+    <!-- 二階の天井案内板オブジェクト: 中央階段・エスカレーター上（「2F」表記） -->
+    <a-entity position="0 4.8 10">
+      <a-box width="4.4" height="0.8" depth="0.14" color="#4a5568"></a-box>
+      <a-box position="-1.6 0.5 0" width="0.04" height="0.8" depth="0.04" color="#718096"></a-box>
+      <a-box position="1.6 0.5 0" width="0.04" height="0.8" depth="0.04" color="#718096"></a-box>
+      <a-text value="2F" position="0 0 0.08" align="center" color="#FFFFFF" scale="3.2 3.2 3.2"></a-text>
+      <a-text value="2F" position="0 0 -0.08" rotation="0 180 0" align="center" color="#FFFFFF" scale="3.2 3.2 3.2"></a-text>
+    </a-entity>
+
+
+
+    <!-- 2. 床面構造（2階：縦方向・横方向へ全面延長、非常階段エリア x < -9.0 は床を完全開放） -->
+    <!-- 2階 奥側フロア（z: 10.0 〜 35.5, 全幅28m） -->
+    <a-plane position="0 0 22.75" rotation="-90 0 0" width="28" height="25.5" color="#747d8c"></a-plane>
+    <!-- 2階 中央階段脇 左側フロア（x: -9.0 〜 -2.0, z: -5.0 〜 10.0：非常階段シャフト x < -9.0 には床を配置しない） -->
+    <a-plane position="-5.5 0 2.5" rotation="-90 0 0" width="7" height="15" color="#747d8c"></a-plane>
+    <!-- 2階 中央階段脇 右側フロア（x: 2.0 〜 14.0, z: -5.0 〜 10.0） -->
+    <a-plane position="8 0 2.5" rotation="-90 0 0" width="12" height="15" color="#747d8c"></a-plane>
+    <!-- 2階 中間フロア（z: -20.0 〜 -5.0, x: -9.0 〜 14.0：非常階段通路 x < -9.0 は開放） -->
+    <a-plane position="2.5 0 -12.5" rotation="-90 0 0" width="23" height="15" color="#747d8c"></a-plane>
+    <!-- 2階 正面エントランス側フロア（z: -38.2 〜 -20.0, 全幅28m：エントランス正面壁まで全面延長） -->
+    <a-plane position="0 0 -29.1" rotation="-90 0 0" width="28" height="18.2" color="#747d8c"></a-plane>
+
+    <!-- 1階天井構造（1階から2階が見えないよう全域を遮蔽、非常階段シャフトは昇降のため開放） -->
+    <!-- 1階 正面エントランス側 天井（z: -38.2 〜 -20.0, 全幅28m） -->
+    <a-plane position="0 -0.05 -29.1" rotation="90 0 0" width="28" height="18.2" color="#f1f2f6"></a-plane>
+    <!-- 1階 中間フロア 天井（z: -20.0 〜 -5.0, x: -9.0 〜 14.0） -->
+    <a-plane position="2.5 -0.05 -12.5" rotation="90 0 0" width="23" height="15" color="#f1f2f6"></a-plane>
+    <!-- 1階 中央階段脇 左側天井（x: -9.0 〜 -2.0, z: -5.0 〜 10.0） -->
+    <a-plane position="-5.5 -0.05 2.5" rotation="90 0 0" width="7" height="15" color="#f1f2f6"></a-plane>
+    <!-- 1階 中央階段脇 右側天井（x: 2.0 〜 14.0, z: -5.0 〜 10.0） -->
+    <a-plane position="8 -0.05 2.5" rotation="90 0 0" width="12" height="15" color="#f1f2f6"></a-plane>
+
+    <!-- 1階フロントコンコース 天井グリッド梁 -->
+    <a-box position="0 -0.2 -10" width="28" height="0.3" depth="0.6" color="#dcdde1"></a-box>
+    <a-box position="0 -0.2 -20" width="28" height="0.3" depth="0.6" color="#dcdde1"></a-box>
+    <a-box position="0 -0.2 -30" width="28" height="0.3" depth="0.6" color="#dcdde1"></a-box>
+
+    <!-- 1階フロア（1階：白に統一・重なりによるチラつきを完全排除） -->
+    <a-plane position="0 -5.0 -2.75" rotation="-90 0 0" width="28" height="76.5" color="#ffffff"></a-plane>
+
+    <!-- ===================================================
+         2階 中央階段吹き抜け周り 手すり（落下防止）
+         ※階段昇降口（z: 7.5, x: -2.0〜2.0）は開放、両サイドと正面を保護
+         =================================================== -->
+    <!-- 階段左手すり (x = -2.1, z: -5.0 〜 7.5) -->
+    <a-plane position="-2.1 0.6 1.25" rotation="0 90 0" width="12.5" height="1.2" color="#74b9ff" opacity="0.4" side="double"></a-plane>
+    <a-box position="-2.1 1.2 1.25" width="0.1" height="0.08" depth="12.5" color="#2d3436"></a-box>
+    <a-box position="-2.1 0.05 1.25" width="0.1" height="0.08" depth="12.5" color="#636e72"></a-box>
+
+    <!-- 階段右手すり (x = 2.1, z: -5.0 〜 7.5) -->
+    <a-plane position="2.1 0.6 1.25" rotation="0 -90 0" width="12.5" height="1.2" color="#74b9ff" opacity="0.4" side="double"></a-plane>
+    <a-box position="2.1 1.2 1.25" width="0.1" height="0.08" depth="12.5" color="#2d3436"></a-box>
+    <a-box position="2.1 0.05 1.25" width="0.1" height="0.08" depth="12.5" color="#636e72"></a-box>
+
+    <!-- 階段正面奥手すり (z = -5.1, x: -2.1 〜 2.1) -->
+    <a-plane position="0 0.6 -5.1" rotation="0 180 0" width="4.2" height="1.2" color="#74b9ff" opacity="0.4" side="double"></a-plane>
+    <a-box position="0 1.2 -5.1" width="4.2" height="0.08" depth="0.1" color="#2d3436"></a-box>
+    <a-box position="0 0.05 -5.1" width="4.2" height="0.08" depth="0.1" color="#636e72"></a-box>
+
+    <!-- 4. 丸柱・角柱・ストリートファニチャー -->
+    <a-cylinder position="-4.5 0.5 10" radius="0.5" height="11" color="#dfe6e9"></a-cylinder>
+    <a-cylinder position="4.5 0.5 10" radius="0.5" height="11" color="#dfe6e9"></a-cylinder>
+    <a-cylinder position="-4.5 0.5 -12" radius="0.5" height="11" color="#dfe6e9"></a-cylinder>
+    <a-cylinder position="4.5 0.5 -12" radius="0.5" height="11" color="#dfe6e9"></a-cylinder>
+    
+    <a-box position="-4.5 3 22" width="0.9" height="6" depth="0.9" color="#b2bec3"></a-box>
+    <a-box position="4.5 3 22" width="0.9" height="6" depth="0.9" color="#b2bec3"></a-box>
+
+    <!-- 立体ベンチ -->
+    <a-box position="0 0.35 26" width="3.2" height="0.12" depth="0.9" color="#b37d4e"></a-box>
+    <a-box position="-1.2 0.17 26" width="0.1" height="0.35" depth="0.7" color="#2f3542"></a-box>
+    <a-box position="1.2 0.17 26" width="0.1" height="0.35" depth="0.7" color="#2f3542"></a-box>
+
+    <!-- 案内サイネージ端末 -->
+    <a-box position="2.2 0.8 20" width="0.6" height="1.6" depth="0.2" color="#2f3542"></a-box>
+    <a-plane position="2.2 1.1 19.89" width="0.5" height="0.7" color="#00d2d3"></a-plane>
+
+    <!-- 5. 店舗ファサード -->
+    <!-- 左側店舗: ファッション -->
+    <a-box position="-11 3 28" width="6" height="6" depth="12" color="#2f3542"></a-box>
+    <a-box position="-7.8 0.3 28" width="0.6" height="0.6" depth="9" color="#ffffff"></a-box>
+    <a-plane position="-7.6 1.8 28" rotation="0 90 0" width="9" height="2.6" color="#a8dadc" opacity="0.35" side="double"></a-plane>
+    <a-box position="-7.4 3.8 28" width="0.3" height="1.1" depth="8" color="#1e272e"></a-box>
+    <a-text value="URBAN FASHION" position="-7.2 3.8 28" rotation="0 90 0" align="center" color="#FFF" scale="2.2 2.2 2.2"></a-text>
+
+    <!-- 右側店舗: カフェ -->
+    <a-box position="11 3 28" width="6" height="6" depth="12" color="#f8efba"></a-box>
+    <a-box position="7.8 0.4 28" width="0.6" height="0.8" depth="8" color="#574b90"></a-box>
+    <a-box position="7.4 3.8 28" width="0.3" height="1.1" depth="8" color="#e15f41"></a-box>
+    <a-text value="BAKERY & CAFE" position="7.2 3.8 28" rotation="0 -90 0" align="center" color="#FFF" scale="2.2 2.2 2.2"></a-text>
+
+    <!-- 右側店舗: 書店 -->
+    <a-box position="11 3 10" width="6" height="6" depth="18" color="#3d3d3d"></a-box>
+    <a-box position="7.4 3.8 10" width="0.3" height="1.1" depth="12" color="#303952"></a-box>
+    <a-text value="BOOKS & STATIONERY" position="7.2 3.8 10" rotation="0 -90 0" align="center" color="#00d2d3" scale="2 2 2"></a-text>
+
+    <!-- ===================================================
+         正面エスカレーター（2階床とシームレスに連続）
+         ※【要件④】頭上の黒い看板オブジェクトは完全削除！
+         =================================================== -->
+    <a-entity id="main-escalator">
+      <!-- 2階接続アプローチデッキ（2階グレー床とシームレス接続） -->
+      <a-box position="0 -0.15 8.75" width="4.0" height="0.3" depth="2.5" color="#747d8c"></a-box>
+      <!-- 乗降口の黄色い警告ライン -->
+      <a-plane position="0 0.03 7.6" rotation="-90 0 0" width="3.4" height="0.25" color="#ffd600"></a-plane>
+
+      <!-- エスカレーター裏面の頑丈な斜めトラスハウジング（宙に浮く隙間をカバー） -->
+      <a-box position="0 -2.6 1.8" width="3.8" height="0.9" depth="13.2" rotation="-22.6 0 0" color="#2c3e50"></a-box>
+      
+      <!-- ステンレスサイドスカートパネル（両脇） -->
+      <a-box position="-1.85 -2.3 1.8" width="0.12" height="1.4" depth="13.2" rotation="-22.6 0 0" color="#bdc3c7"></a-box>
+      <a-box position="1.85 -2.3 1.8" width="0.12" height="1.4" depth="13.2" rotation="-22.6 0 0" color="#bdc3c7"></a-box>
+      <!-- エスカレーター手すりベルト（黒ゴム） -->
+      <a-box position="-1.85 -1.5 1.8" width="0.16" height="0.12" depth="13.4" rotation="-22.6 0 0" color="#111111"></a-box>
+      <a-box position="1.85 -1.5 1.8" width="0.16" height="0.12" depth="13.4" rotation="-22.6 0 0" color="#111111"></a-box>
+
+      <!-- 階段ステップ（金属ステップ群：1F⇔2F 双方向昇降対応） -->
+      <a-box position="0 -0.15 7.8" width="3.4" height="0.3" depth="1.0" color="#57606f"></a-box>
+      <a-box position="0 -0.4 7.0" width="3.4" height="0.8" depth="1.5" color="#57606f"></a-box>
+      <a-box position="0 -1.0 5.5" width="3.4" height="0.8" depth="1.5" color="#34495e"></a-box>
+      <a-box position="0 -1.6 4.0" width="3.4" height="0.8" depth="1.5" color="#57606f"></a-box>
+      <a-box position="0 -2.2 2.5" width="3.4" height="0.8" depth="1.5" color="#34495e"></a-box>
+      <a-box position="0 -2.8 1.0" width="3.4" height="0.8" depth="1.5" color="#57606f"></a-box>
+      <a-box position="0 -3.4 -0.5" width="3.4" height="0.8" depth="1.5" color="#34495e"></a-box>
+      <a-box position="0 -4.0 -2.0" width="3.4" height="0.8" depth="1.5" color="#57606f"></a-box>
+      <a-box position="0 -4.6 -3.5" width="3.4" height="0.8" depth="1.5" color="#34495e"></a-box>
+      <a-box position="0 -4.85 -4.2" width="3.4" height="0.3" depth="1.0" color="#34495e"></a-box>
+
+      <!-- 1階着地デッキ（1階白床とシームレス接続） -->
+      <a-box position="0 -4.95 -4.8" width="4.0" height="0.1" depth="2.0" color="#ffffff"></a-box>
+      <a-plane position="0 -4.89 -4.0" rotation="-90 0 0" width="3.4" height="0.25" color="#ffd600"></a-plane>
+
+      <!-- 1階から支えるスチール構造支柱 -->
+      <a-box position="-1.6 -3.6 1.8" width="0.4" height="3.0" depth="0.4" color="#2c3e50"></a-box>
+      <a-box position="1.6 -3.6 1.8" width="0.4" height="3.0" depth="0.4" color="#2c3e50"></a-box>
+
+      <!-- 乗り口両脇の丸型セーフティ支柱 -->
+      <a-cylinder position="-1.85 0.5 7.6" radius="0.1" height="1.0" color="#111111"></a-cylinder>
+      <a-cylinder position="1.85 0.5 7.6" radius="0.1" height="1.0" color="#111111"></a-cylinder>
+    </a-entity>
+
+    <!-- エスカレーター避難混雑群衆（二階オブジェクト到達後に表示・当たり判定なし） -->
+    <a-entity id="escalator-crowd" visible="false"></a-entity>
+
+    <!-- ===================================================
+         【要件③・⑤】非常階段入口
+         ※【要件②】床の緑オブジェクトは完全削除！
+         =================================================== -->
+    <a-entity id="stair-entrance">
+      <!-- 落ち着いたトーンの非常階段ゲート枠（壁面と統一した落ち着いたカラー） -->
+      <a-box position="-8.8 1.9 10.0" width="0.4" height="3.8" depth="0.4" color="#34495e"></a-box>
+      <a-box position="-8.8 1.9 6.0" width="0.4" height="3.8" depth="0.4" color="#34495e"></a-box>
+      <a-box position="-8.8 3.7 8.0" width="0.4" height="0.4" depth="4.2" color="#34495e"></a-box>
+
+      <!-- 梁上の非常階段サイン看板（ベース台座を壁面色と調和） -->
+      <a-box position="-8.6 4.1 8.0" width="0.3" height="0.5" depth="3.4" color="#2c3e50"></a-box>
+      <a-plane id="stairs-wall-sign" position="-8.43 4.1 8.0" rotation="0 90 0" width="3.2" height="0.46" material="shader: flat;"></a-plane>
+
+      <!-- 【要件⑪】非常階段の上の天井に避難誘導灯を設置（一回り大型化） -->
+      <a-entity id="ceiling-evac-light" position="-8.8 4.9 8.0">
+        <!-- 天井（y=6.0）から吊り下げるスチールロッド金具 -->
+        <a-cylinder position="0 0.6 -0.9" radius="0.025" height="1.1" color="#bdc3c7"></a-cylinder>
+        <a-cylinder position="0 0.6 0.9" radius="0.025" height="1.1" color="#bdc3c7"></a-cylinder>
+        <!-- 誘導灯薄型ハウジングフレーム（一回り大型化：奥行2.5m x 高さ0.9m） -->
+        <a-box position="0 0 0" width="0.16" height="0.9" depth="2.5" color="#f1f2f6"></a-box>
+        <!-- 誘導灯発光パネル（正面・東向き：2階フロアから目視） -->
+        <a-plane id="guide-light-sign" position="0.085 0 0" rotation="0 90 0" width="2.4" height="0.82" material="shader: flat;"></a-plane>
+        <!-- 誘導灯発光パネル（裏面・西向き：非常階段側から目視） -->
+        <a-plane id="guide-light-sign-back" position="-0.085 0 0" rotation="0 -90 0" width="2.4" height="0.82" material="shader: flat;"></a-plane>
+        <!-- 誘導灯グリーンエミッシブ光（天井・周囲を美しく照らす） -->
+        <a-light type="point" position="0.35 -0.1 0" intensity="0.55" color="#2ecc71" distance="9"></a-light>
+      </a-entity>
+
+      <!-- 穏やかな誘導灯（ネオンの強烈なグレアを完全抑制） -->
+      <a-light type="point" position="-8.0 2.8 8.0" intensity="0.3" color="#a8ffc0" distance="8"></a-light>
+    </a-entity>
+
+    <!-- 非常階段通路・階段本体
+         ※横幅一杯（耐火隔壁 x: -9.0 から外壁 x: -14.0 まで全幅 4.8m〜5.0m）
+         ※床の y 座標をオフセット（2階踊り場 y: 0.01）してチラつき（Z-fighting）を完全解消！ -->
+    <a-plane position="-11.5 0.01 8" rotation="-90 0 0" width="5.0" height="4" color="#747d8c"></a-plane>
+    <a-entity position="-11.5 0 0">
+      <a-box position="0 -0.5 5" width="4.8" height="0.8" depth="1.8" color="#636e72"></a-box>
+      <a-box position="0 -1.2 3" width="4.8" height="0.8" depth="1.8" color="#57606f"></a-box>
+      <a-box position="0 -1.9 1" width="4.8" height="0.8" depth="1.8" color="#636e72"></a-box>
+      <a-box position="0 -2.6 -1" width="4.8" height="0.8" depth="1.8" color="#57606f"></a-box>
+      <a-box position="0 -3.3 -3" width="4.8" height="0.8" depth="1.8" color="#636e72"></a-box>
+      <a-box position="0 -4.0 -5" width="4.8" height="0.8" depth="1.8" color="#57606f"></a-box>
+      <a-box position="0 -4.7 -7" width="4.8" height="0.8" depth="1.8" color="#636e72"></a-box>
+      
+      <!-- 左右の壁際手すり（幅4.8mの両サイド） -->
+      <a-box position="-2.42 -2.5 0" width="0.1" height="0.9" depth="15" rotation="-20 0 0" color="#f1f2f6"></a-box>
+      <a-box position="2.42 -2.5 0" width="0.1" height="0.9" depth="15" rotation="-20 0 0" color="#f1f2f6"></a-box>
+    </a-entity>
+
+
+
+    <!-- ===================================================
+         STEP ② 目的地 兼 STEP ③ 災害発生スタート地点：2階の緑のオブジェクト
+         （座標: 0, 0, 30 / 当たり判定半径 2.0m）
+         =================================================== -->
+    <a-entity id="target-green-2f" position="0 0 30">
+      <a-cylinder position="0 0.05 0" radius="2.0" height="0.08" color="#00e676" material="emissive: #00c853; emissiveIntensity: 0.5;" opacity="0.9"></a-cylinder>
+      <a-cylinder position="0 1.4 0" radius="1.5" height="2.8" color="#00e676" opacity="0.22" open-ended="true" side="double"></a-cylinder>
+      <a-octahedron position="0 1.5 0" radius="0.55" color="#00e676" material="emissive: #00c853; emissiveIntensity: 0.4;"></a-octahedron>
+      <a-text value="2F CHECKPOINT" position="0 2.5 0" rotation="0 180 0" align="center" color="#FFFFFF" scale="1.8 1.8 1.8" side="double"></a-text>
+    </a-entity>
+
+    <!-- 8. メインエントランス正面壁面（1階＆2階） -->
+    <!-- 1階正面外壁（幅28m全面を覆う堅牢な壁構造面） -->
+    <a-box position="0 -2.5 -38.2" width="28" height="5.2" depth="0.4" color="#2c3e50"></a-box>
+    <!-- 2階正面外壁（2階床から天井まで全面を密閉） -->
+    <a-box position="0 3.0 -38.2" width="28" height="6.0" depth="0.4" color="#2c3e50"></a-box>
+    <!-- エントランスゲート門構えフレーム（壁面に一体化設置） -->
+    <a-box position="0 -2.5 -38.0" width="12" height="5.0" depth="0.2" color="#1e272e"></a-box>
+
+    <!-- 1階 メインエントランス 壁面固定看板（壁面に完全密着設置・日本語CanvasTexture） -->
+    <a-entity position="0 -1.5 -37.8">
+      <!-- 大型外枠フレーム（白枠・立体ベゼル） -->
+      <a-box position="0 0 0" width="11.4" height="2.0" depth="0.12" color="#ffffff"></a-box>
+      <!-- 看板ベースプレート -->
+      <a-box position="0 0 0.04" width="11.0" height="1.75" depth="0.1" color="#2c3e50"></a-box>
+      <!-- メイン看板プレート（CanvasTextureで「メインエントランス」を高精細描画） -->
+      <a-plane id="main-entrance-plate" position="0 0 0.12" width="10.8" height="1.65" material="shader: flat;"></a-plane>
+    </a-entity>
+
+    <!-- ガラスドア（エントランス枠内に配置） -->
+    <a-plane position="-2 -3.7 -37.85" width="3" height="2.6" color="#74b9ff" opacity="0.35"></a-plane>
+    <a-plane position="2 -3.7 -37.85" width="3" height="2.6" color="#74b9ff" opacity="0.35"></a-plane>
+    <a-box position="-3.5 -3.7 -37.8" width="0.08" height="2.6" depth="0.1" color="#718096"></a-box>
+    <a-box position="-0.5 -3.7 -37.8" width="0.08" height="2.6" depth="0.1" color="#718096"></a-box>
+    <a-box position="0.5 -3.7 -37.8" width="0.08" height="2.6" depth="0.1" color="#718096"></a-box>
+    <a-box position="3.5 -3.7 -37.8" width="0.08" height="2.6" depth="0.1" color="#718096"></a-box>
+
+    <!-- STEP ③ 避難ゴール：床面フィニッシュサークル（当たり判定と同じ半径2.0m・直径4.0mのジャストサイズ） -->
+    <a-entity id="goal-marker-1f" visible="false">
+      <a-cylinder position="0 -4.95 -34" radius="2.0" height="0.1" color="#00e676" material="emissive: #00c853; emissiveIntensity: 0.7;" opacity="0.9"></a-cylinder>
+      <a-text value="SAFE AREA : GOAL" position="0 -4.85 -34" rotation="-90 0 0" align="center" color="#FFFFFF" scale="2.2 2.2 2.2"></a-text>
+    </a-entity>
+
+    <!-- 外壁・耐火隔壁 -->
+    <a-box position="-14.5 1 0" width="1" height="14" depth="75" color="#2c3e50"></a-box>
+    <a-box position="14.5 1 0" width="1" height="14" depth="75" color="#2c3e50"></a-box>
+    <!-- 【要件⑤】プレイヤー初期位置の後ろの壁を2階の床端（z: 35.0）まで前に出す！ -->
+    <a-box position="0 1 35.5" width="30" height="14" depth="1" color="#2c3e50"></a-box>
+    <a-box position="0 1 -40.5" width="30" height="14" depth="1" color="#2c3e50"></a-box>
+    <!-- 耐火隔壁（開口部 z: 5.8〜10.2 以外を遮断） -->
+    <a-box position="-9 1 23" width="0.4" height="12" depth="26" color="#34495e"></a-box>
+    <a-box position="-9 1 -7" width="0.4" height="12" depth="26" color="#34495e"></a-box>
+
+    <!-- ===================================================
+         1階奥コンコース（エスカレーター奥の壁・店舗・天井）
+         =================================================== -->
+    <!-- 1階奥エリア 天井（2階床の裏面をカバー） -->
+    <a-plane position="0 -0.05 22.5" rotation="90 0 0" width="28" height="26" color="#f1f2f6"></a-plane>
+    <a-box position="0 -0.2 30" width="28" height="0.3" depth="0.6" color="#dcdde1"></a-box>
+    <a-box position="0 -0.2 20" width="28" height="0.3" depth="0.6" color="#dcdde1"></a-box>
+    <a-box position="0 -0.2 10" width="28" height="0.3" depth="0.6" color="#dcdde1"></a-box>
+
+    <!-- 1階奥の壁（z=35.0：総合案内所・サービスカウンター） -->
+    <a-plane position="0 -2.5 35.1" rotation="0 180 0" width="28" height="5.0" color="#2c3e50"></a-plane>
+    <a-box position="0 -3.8 33.5" width="8" height="1.2" depth="1.8" color="#34495e"></a-box>
+    <a-box position="0 -3.15 33.5" width="8.2" height="0.1" depth="2.0" color="#dfe6e9"></a-box>
+    <a-text value="1F CENTRAL MARKET & INFORMATION" position="0 -1.2 35.0" align="center" color="#FFEAA7" scale="2.5 2.5 2.5"></a-text>
+    <a-text value="SERVICE COUNTER & INFORMATION" position="0 -1.8 35.0" align="center" color="#b2bec3" scale="1.4 1.4 1.4"></a-text>
+    <!-- 非常口表示（奥壁スタッフ用） -->
+    <a-box position="0 -0.5 34.9" width="2.4" height="0.5" depth="0.1" color="#00e676" material="emissive: #00e676; emissiveIntensity: 0.8;"></a-box>
+    <a-text value="EMERGENCY EXIT (STAFF ONLY)" position="0 -0.5 34.8" align="center" color="#ffffff" scale="1.1 1.1 1.1"></a-text>
+
+    <!-- 1階 右側店舗: スーパーマーケット (x: 7.5〜14, z: 10〜34)
+         ※上面を Y=-0.1 に設定し、2階床（Y=0）とのZ-fighting（bakery&cafeとbooks&stationery間のちらつき）を完全解消 -->
+    <a-box position="11 -2.55 22.5" width="6" height="4.9" depth="24" color="#2f3542"></a-box>
+    <a-plane position="7.8 -2.5 22.5" rotation="0 -90 0" width="23" height="4.4" color="#81ecec" opacity="0.3" side="double"></a-plane>
+    <a-box position="7.6 -0.8 22.5" width="0.3" height="1.0" depth="20" color="#1e272e"></a-box>
+    <a-text value="GOURMET SUPERMARKET" position="7.4 -0.8 22.5" rotation="0 -90 0" align="center" color="#55efc4" scale="2.2 2.2 2.2"></a-text>
+
+    <!-- 1階 左側店舗: ドラッグストア & カフェ (x: -7.5〜-14, z: 10〜34)
+         ※上面を Y=-0.1 に設定し、2階非常階段奥通路床とのZ-fighting（ちらつき）を完全解消 -->
+    <a-box position="-11 -2.55 22.5" width="6" height="4.9" depth="24" color="#2f3542"></a-box>
+    <a-plane position="-7.8 -2.5 22.5" rotation="0 90 0" width="23" height="4.4" color="#a8dadc" opacity="0.3" side="double"></a-plane>
+    <a-box position="-7.6 -0.8 22.5" width="0.3" height="1.0" depth="20" color="#1e272e"></a-box>
+    <a-text value="PHARMACY & HEALTH CARE" position="-7.4 -0.8 22.5" rotation="0 90 0" align="center" color="#74b9ff" scale="2.2 2.2 2.2"></a-text>
+
+    <!-- 1階 構造柱 -->
+    <a-box position="-4.5 -2.5 22" width="0.9" height="5" depth="0.9" color="#b2bec3"></a-box>
+    <a-box position="4.5 -2.5 22" width="0.9" height="5" depth="0.9" color="#b2bec3"></a-box>
+  </a-entity>
+</a-scene>
+
+<script>
+  // Web Audio API（スマホブラウザ対応・軽量シンセ音）
+  let audioCtx = null;
+  const initAudio = () => {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  };
+  const playSound = (freq, type, duration, gainVal = 0.1) => {
+    try {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+  };
+  const soundBeep = () => playSound(880, 'sine', 0.12, 0.08);
+  const soundWarning = () => {
+    playSound(440, 'sawtooth', 0.15, 0.1);
+    setTimeout(() => playSound(330, 'sawtooth', 0.2, 0.1), 120);
+  };
+  const soundAlarm = () => {
+    playSound(520, 'sawtooth', 0.22, 0.14);
+    setTimeout(() => playSound(780, 'sawtooth', 0.25, 0.14), 220);
+    setTimeout(() => playSound(520, 'sawtooth', 0.25, 0.14), 460);
+  };
+  const soundStart = () => playSound(1174, 'triangle', 0.35, 0.15);
+  const soundGoal = () => {
+    playSound(523.25, 'sine', 0.1, 0.1);
+    setTimeout(() => playSound(659.25, 'sine', 0.1, 0.1), 100);
+    setTimeout(() => playSound(783.99, 'sine', 0.15, 0.1), 200);
+    setTimeout(() => playSound(1046.50, 'sine', 0.4, 0.12), 300);
+  };
+
+  // DOM要素キャッシュ（毎フレームのDOM検索を防止）
+  const player = document.querySelector('#player');
+  const cam = document.querySelector('#cam');
+  const targetGreen2F = document.getElementById('target-green-2f');
+  const goalMarker1F = document.getElementById('goal-marker-1f');
+  const escalatorCrowd = document.getElementById('escalator-crowd');
+  const mobileHud = document.getElementById('mobile-hud');
+  const arNavIcon = document.getElementById('ar-nav-icon');
+  const arNavMsg = document.getElementById('ar-nav-msg');
+  const arNavBadge = document.getElementById('ar-nav-badge');
+  const arNavBar = document.getElementById('ar-nav-bar');
+  const arStatusDot = document.getElementById('ar-status-dot');
+  const hudTimerLabel = document.getElementById('hud-timer-label');
+  const hudTimer = document.getElementById('hud-timer');
+  const hudDistLabel = document.getElementById('hud-dist-label');
+  const hudDist = document.getElementById('hud-dist');
+  const hudSpeed = document.getElementById('hud-speed');
+  const hudSpeedBadge = document.getElementById('hud-speed-badge');
+  const joystickZone = document.getElementById('joystick-zone');
+  const joystickBase = document.getElementById('joystick-base');
+  const joystickStick = document.getElementById('joystick-stick');
+  const screenTitle = document.getElementById('screen-title');
+  const screenCountdown = document.getElementById('screen-countdown');
+  const countNum = document.getElementById('count-num');
+  const screenResult = document.getElementById('screen-result');
+  const tutCard = document.getElementById('tut-floating-card');
+  const btnSkipTut = document.getElementById('btn-skip-tut');
+  const modalTutComplete = document.getElementById('modal-tut-complete');
+  const tutChkLook = document.getElementById('tut-chk-look');
+  const tutChkMove = document.getElementById('tut-chk-move');
+  const tutChkReach = document.getElementById('tut-chk-reach');
+
+  // ゲーム状態管理
+  // 'TITLE' | 'TUTORIAL' | 'PHASE_INBOUND' | 'DISASTER_COUNTDOWN' | 'PHASE_EVACUATION' | 'RESULT'
+  let gameState = 'TITLE';
+  let moveState = { up: false, down: false, left: false, right: false };
+  let joystickTouchId = null;
+  const joystickVector = { x: 0, y: 0 }; // 360度アナログ移動ベクトル (-1.0 ~ +1.0)
+  const MAX_JOYSTICK_RADIUS = 44; // スティック最大可動半径 (px)
+
+  // 視点移動制御変数（マルチタッチ対応）
+  let lookTouchId = null;
+  let lastLookX = 0;
+  let lastLookY = 0;
+  let isMouseDownLook = false;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+  const LOOK_SENSITIVITY_X = 0.0035; // 左右感度
+  const LOOK_SENSITIVITY_Y = 0.0030; // 上下感度
+  const MAX_PITCH = Math.PI * 0.42;   // 上下最大角度（約75度）
+
+  const getLookControls = () => {
+    if (cam && cam.components && cam.components['look-controls']) {
+      return cam.components['look-controls'];
+    }
+    return null;
+  };
+
+  let startTime = null;
+  let usedRouteB = false;
+  let prevWarning = false;
+  let totalStoppedTimeMs = 0;   // 【要件】避難時の合計停止時間（ミリ秒）
+  let initialStopTimeMs = 0;    // 避難開始時の初動停止時間（ミリ秒）
+  let hasStartedFirstMove = false; // 避難開始後の初動移動フラグ
+  let tutProgress = { looked: false, moved: false, reached: false };
+  let tutInitialYaw = 0;
+  let playerFloorLevel = '1F'; // '1F' または '2F'
+  let countdownTimerId = null;
+
+  // プレイヤー座標キャッシュ（GC負荷・DOM負荷削減）
+  const playerPos = { x: 0, y: -3.4, z: -34 };
+  const setPlayerPosition = (x, y, z) => {
+    playerPos.x = x;
+    playerPos.y = y;
+    playerPos.z = z;
+    if (player && player.object3D) {
+      player.object3D.position.set(x, y, z);
+    } else if (player) {
+      player.setAttribute('position', `${x} ${y} ${z}`);
+    }
+  };
+  window.setPlayerPosition = setPlayerPosition;
+
+  // DOM再描画最小化キャッシュ
+  const lastHudState = {
+    icon: '',
+    text: '',
+    color: '',
+    badge: '',
+    timer: '',
+    dist: '',
+    speed: ''
+  };
+
+  // ==========================================
+  // 【当たり判定コライダー定義】
+  // ==========================================
+  const PLAYER_RADIUS = 0.35;
+
+  // AABB（矩形）障害物
+  const BOX_COLLIDERS = [
+    // 外壁
+    { minX: -16.0, maxX: -13.5, minZ: -45.0, maxZ: 45.0, floor: 'ALL' },
+    { minX: 13.5, maxX: 16.0, minZ: -45.0, maxZ: 45.0, floor: 'ALL' },
+    // 奥の壁（z: 35.0）コライダー
+    { minX: -16.0, maxX: 16.0, minZ: 34.8, maxZ: 40.0, floor: 'ALL' },
+    { minX: -16.0, maxX: -3.8, minZ: -42.0, maxZ: -36.5, floor: '1F' },
+    { minX: 3.8, maxX: 16.0, minZ: -42.0, maxZ: -36.5, floor: '1F' },
+    { minX: -16.0, maxX: 16.0, minZ: -45.0, maxZ: -37.8, floor: 'ALL' },
+
+    // 店舗（2階）
+    { minX: -15.0, maxX: -7.3, minZ: 21.0, maxZ: 34.5, floor: '2F' },
+    { minX: 7.3, maxX: 15.0, minZ: 21.0, maxZ: 34.5, floor: '2F' },
+    { minX: 7.3, maxX: 15.0, minZ: 0.5, maxZ: 19.5, floor: '2F' },
+
+    // 中央ストリートファニチャー（2階）
+    { minX: -1.7, maxX: 1.7, minZ: 25.4, maxZ: 26.6, floor: '2F' },
+    { minX: 1.8, maxX: 2.6, minZ: 19.7, maxZ: 20.3, floor: '2F' },
+
+    // 角柱（2階）
+    { minX: -5.0, maxX: -4.0, minZ: 21.5, maxZ: 22.5, floor: '2F' },
+    { minX: 4.0, maxX: 5.0, minZ: 21.5, maxZ: 22.5, floor: '2F' },
+
+    // 耐火隔壁（中央壁 x: -9 付近）
+    // 2階: z: 5.8〜10.2 の非常階段入口以外を通行不可
+    { minX: -9.3, maxX: -8.7, minZ: 10.2, maxZ: 35.0, floor: '2F' },
+    { minX: -9.3, maxX: -8.7, minZ: -20.0, maxZ: 5.8, floor: '2F' },
+    // 1階: 実壁（z: 6.0 〜 -20.0）のみコライダー設置（z < -20.0 はMain Entranceへ全面開放）
+    { minX: -9.3, maxX: -8.7, minZ: -20.0, maxZ: 6.0, floor: '1F' },
+
+    // 2階 中央階段吹き抜け開口部周り手すり（落下防止）
+    { minX: -2.3, maxX: -1.9, minZ: -5.3, maxZ: 7.5, floor: '2F' },
+    { minX: 1.9, maxX: 2.3, minZ: -5.3, maxZ: 7.5, floor: '2F' },
+    { minX: -2.3, maxX: 2.3, minZ: -5.3, maxZ: -4.9, floor: '2F' },
+    // 2階 エントランス正面壁コライダー（z: -38.2）
+    { minX: -15.0, maxX: 15.0, minZ: -40.0, maxZ: -37.8, floor: '2F' },
+
+    // エスカレーター（中央階段）両脇の手すりガード（昇降中の横落下防止）
+    { minX: -3.5, maxX: -2.0, minZ: -3.8, maxZ: 7.5, floor: 'ESCALATOR_SIDES' },
+    { minX: 2.0, maxX: 3.5, minZ: -3.8, maxZ: 7.5, floor: 'ESCALATOR_SIDES' },
+
+    // 非常階段両脇の手すり・壁（幅4.8mに対応）
+    { minX: -16.0, maxX: -13.8, minZ: -8.0, maxZ: 6.0, floor: 'STAIRS_SIDES' },
+    { minX: -9.2, maxX: -7.0, minZ: -8.0, maxZ: 6.0, floor: 'STAIRS_SIDES' },
+
+    // 1階店舗 & 柱コライダー
+    { minX: -15.0, maxX: -7.5, minZ: 10.0, maxZ: 34.5, floor: '1F' },
+    { minX: 7.5, maxX: 15.0, minZ: 10.0, maxZ: 34.5, floor: '1F' },
+    { minX: -5.0, maxX: -4.0, minZ: 21.5, maxZ: 22.5, floor: '1F' },
+    { minX: 4.0, maxX: 5.0, minZ: 21.5, maxZ: 22.5, floor: '1F' },
+  ];
+
+  // 円形コライダー（4本のアトリウム大丸柱）
+  const CIRCLE_COLLIDERS = [
+    { x: -4.5, z: 10.0, radius: 0.55 },
+    { x: 4.5, z: 10.0, radius: 0.55 },
+    { x: -4.5, z: -12.0, radius: 0.55 },
+    { x: 4.5, z: -12.0, radius: 0.55 },
+  ];
+
+  // 衝突判定ロジック
+  function checkCollision(targetX, targetZ, posY) {
+    const is2F = posY > -2.0;
+    const is1F = posY <= -2.0;
+    const onStairs = targetX < -7.5 && targetZ >= -8.5 && targetZ <= 6.5;
+
+    // 1. AABBボックス衝突チェック
+    for (let i = 0; i < BOX_COLLIDERS.length; i++) {
+      const b = BOX_COLLIDERS[i];
+      if (b.floor === '2F' && !is2F) continue;
+      if (b.floor === '1F' && !is1F) continue;
+      // 中央階段の横ガードは階段スロープ上（posY > -3.2 かつ posY < 1.0）にいる時のみ有効化し、1F床の通行は妨げない
+      if (b.floor === 'ESCALATOR_SIDES' && (posY <= -3.2 || posY >= 1.0)) continue;
+      if (b.floor === 'STAIRS_SIDES' && !onStairs) continue;
+
+      const closestX = Math.max(b.minX, Math.min(targetX, b.maxX));
+      const closestZ = Math.max(b.minZ, Math.min(targetZ, b.maxZ));
+      const distX = targetX - closestX;
+      const distZ = targetZ - closestZ;
+      if ((distX * distX + distZ * distZ) < (PLAYER_RADIUS * PLAYER_RADIUS)) {
+        return true;
+      }
+    }
+
+    // 2. 丸柱衝突チェック
+    for (let i = 0; i < CIRCLE_COLLIDERS.length; i++) {
+      const c = CIRCLE_COLLIDERS[i];
+      const dx = targetX - c.x;
+      const dz = targetZ - c.z;
+      const minDist = PLAYER_RADIUS + c.radius;
+      if (dx * dx + dz * dz < minDist * minDist) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+  window.checkCollision = checkCollision;
+
+  // カメラ視点リセット（Yaw角・Pitch角の内部オブジェクト完全同期）
+  const resetCamView = (yawAngleDeg = 180) => {
+    const rad = (yawAngleDeg * Math.PI / 180);
+    const ctrl = getLookControls();
+    if (ctrl) {
+      if (ctrl.pitchObject) {
+        ctrl.pitchObject.rotation.x = 0;
+        ctrl.pitchObject.rotation.y = 0;
+        ctrl.pitchObject.rotation.z = 0;
+      }
+      if (ctrl.yawObject) {
+        ctrl.yawObject.rotation.x = 0;
+        ctrl.yawObject.rotation.y = rad;
+        ctrl.yawObject.rotation.z = 0;
+      }
+    }
+    if (cam && cam.object3D) {
+      cam.object3D.rotation.set(0, rad, 0);
+    }
+  };
+
+  // HUD更新（差分がある場合のみDOM操作を実行）
+  const updateARHud = (icon, text, color, badge) => {
+    if (lastHudState.icon !== icon) {
+      arNavIcon.innerText = icon;
+      lastHudState.icon = icon;
+    }
+    if (lastHudState.text !== text) {
+      arNavMsg.innerText = text;
+      lastHudState.text = text;
+
+    }
+    if (lastHudState.badge !== badge) {
+      arNavBadge.innerText = badge;
+      lastHudState.badge = badge;
+    }
+    if (lastHudState.color !== color) {
+      arNavIcon.style.color = color;
+      arNavIcon.style.background = `${color}22`;
+      arNavBar.style.borderColor = color;
+      lastHudState.color = color;
+    }
+  };
+
+  const setHudTimerText = (val) => {
+    if (lastHudState.timer !== val) {
+      hudTimer.innerText = val;
+      lastHudState.timer = val;
+    }
+  };
+
+  const setHudDistText = (val) => {
+    if (lastHudState.dist !== val) {
+      hudDist.innerText = val;
+      lastHudState.dist = val;
+    }
+  };
+
+  // 視点タッチ・ドラッグ追跡のリセット（スタック防止）
+  const resetLookTouch = () => {
+    lookTouchId = null;
+    lastLookX = 0;
+    lastLookY = 0;
+    isMouseDownLook = false;
+  };
+
+  // ジョイスティックおよび全移動状態のリセット（スタック防止）
+  const resetJoystick = () => {
+    joystickTouchId = null;
+    joystickVector.x = 0;
+    joystickVector.y = 0;
+    if (joystickStick) joystickStick.style.transform = 'translate(0px, 0px)';
+    if (joystickBase) joystickBase.classList.remove('active');
+  };
+
+  const resetAllKeys = () => {
+    moveState.up = false;
+    moveState.down = false;
+    moveState.left = false;
+    moveState.right = false;
+    resetJoystick();
+    resetLookTouch();
+  };
+
+  // ==========================================
+  // 3ステップ ゲーム進行フロー制御
+  // ① チュートリアル -> ② 1F メインエントランスから2F緑オブジェクトへ移動 -> ③ 災害発生＆1F メインエントランスへ避難
+  // ==========================================
+
+  // タイトル画面表示
+  const showTitle = () => {
+    if (countdownTimerId) {
+      clearInterval(countdownTimerId);
+      countdownTimerId = null;
+    }
+    resetAllKeys();
+    gameState = 'TITLE';
+    playerFloorLevel = '1F';
+    screenTitle.classList.remove('hidden');
+    screenCountdown.classList.add('hidden');
+    screenResult.classList.add('hidden');
+    mobileHud.classList.add('hidden');
+    if (joystickZone) joystickZone.classList.add('hidden');
+    tutCard.classList.add('hidden');
+    btnSkipTut.classList.add('hidden');
+    modalTutComplete.classList.add('hidden');
+    if (targetGreen2F) targetGreen2F.setAttribute('visible', 'true');
+    if (goalMarker1F) goalMarker1F.setAttribute('visible', 'false');
+    if (escalatorCrowd) escalatorCrowd.setAttribute('visible', 'false');
+    setPlayerPosition(0, -3.4, -34);
+    resetCamView(180);
+  };
+
+  // STEP ①: 操作に慣れるチュートリアル
+  const startTutorial = () => {
+    if (countdownTimerId) {
+      clearInterval(countdownTimerId);
+      countdownTimerId = null;
+    }
+    initAudio();
+    soundBeep();
+    resetAllKeys();
+    gameState = 'TUTORIAL';
+    tutProgress = { looked: false, moved: false, reached: false };
+    screenTitle.classList.add('hidden');
+    screenCountdown.classList.add('hidden');
+    screenResult.classList.add('hidden');
+    mobileHud.classList.add('hidden');
+    modalTutComplete.classList.add('hidden');
+    tutCard.classList.remove('hidden');
+    btnSkipTut.classList.remove('hidden');
+    if (joystickZone) joystickZone.classList.remove('hidden');
+    tutChkLook.classList.remove('done');
+    tutChkMove.classList.remove('done');
+    tutChkReach.classList.remove('done');
+    if (escalatorCrowd) escalatorCrowd.setAttribute('visible', 'false');
+    setPlayerPosition(150, 1.6, 4);
+    resetCamView(0);
+    tutInitialYaw = 0;
+  };
+
+  // STEP ②: 1階 メインエントランス から 2階の緑のオブジェクト (0, 0, 30) まで移動
+  const startInboundPhase = () => {
+    if (countdownTimerId) {
+      clearInterval(countdownTimerId);
+      countdownTimerId = null;
+    }
+    initAudio();
+    soundStart();
+    resetAllKeys();
+    gameState = 'PHASE_INBOUND';
+    playerFloorLevel = '1F';
+    startTime = null;
+    usedRouteB = false;
+    prevWarning = false;
+
+    screenTitle.classList.add('hidden');
+    tutCard.classList.add('hidden');
+    btnSkipTut.classList.add('hidden');
+    modalTutComplete.classList.add('hidden');
+    screenCountdown.classList.add('hidden');
+    screenResult.classList.add('hidden');
+    mobileHud.classList.remove('hidden');
+    if (joystickZone) joystickZone.classList.remove('hidden');
+
+    // 2Fの緑オブジェクトを表示し、1Fの避難ゴールサークル・エスカレーター混雑群衆は非表示にする
+    if (targetGreen2F) targetGreen2F.setAttribute('visible', 'true');
+    if (goalMarker1F) goalMarker1F.setAttribute('visible', 'false');
+    if (escalatorCrowd) escalatorCrowd.setAttribute('visible', 'false');
+
+    // 1F メインエントランス (0, -3.4, -34) から館内奥 (+Z方向: 180度) を向いてスタート
+    setPlayerPosition(0, -3.4, -34);
+    resetCamView(180);
+
+    if (hudTimerLabel) hudTimerLabel.innerText = "PHASE";
+    setHudTimerText("STEP ②");
+    if (hudDistLabel) hudDistLabel.innerText = "2F緑オブジェクトまで";
+    setHudDistText("64m");
+    if (arStatusDot) arStatusDot.style.background = "#00e676";
+
+    updateARHud("↑", "1階からエスカレーターで2階の緑のオブジェクトへ", "#00e676", "STEP ② : 2Fへ向かう");
+  };
+
+  // STEP ②到達時 -> STEP ③ 火災発生アラート＆状況把握画面表示（プレイヤー確認待ち）
+  const triggerDisaster = () => {
+    if (gameState === 'DISASTER_COUNTDOWN') return;
+    initAudio();
+    soundAlarm();
+    resetAllKeys();
+    gameState = 'DISASTER_COUNTDOWN';
+    playerFloorLevel = '2F';
+
+    // 2F緑オブジェクトの位置に整列し、1F出口方向（-Z方向: 0度）を向く
+    setPlayerPosition(0, 1.6, 30);
+    resetCamView(0);
+
+    // 2F緑オブジェクトを消去し、1F メインエントランスの避難ゴールサークルを出現させる
+    if (targetGreen2F) targetGreen2F.setAttribute('visible', 'false');
+    if (goalMarker1F) goalMarker1F.setAttribute('visible', 'true');
+
+    // 【要件】二階オブジェクト到達後、エスカレーターに群がる人型群衆オブジェクトを表示！
+    if (escalatorCrowd) escalatorCrowd.setAttribute('visible', 'true');
+
+    mobileHud.classList.add('hidden');
+    if (joystickZone) joystickZone.classList.add('hidden');
+    screenCountdown.classList.remove('hidden');
+  };
+  window.triggerDisaster = triggerDisaster;
+  window.startInboundPhase = startInboundPhase;
+
+  // STEP ③: 状況把握完了（OKボタン押下時）-> 1階 メインエントランス まで避難移動開始
+  const startEvacuationPhase = () => {
+    if (countdownTimerId) {
+      clearInterval(countdownTimerId);
+      countdownTimerId = null;
+    }
+    screenCountdown.classList.add('hidden');
+    soundStart();
+    resetAllKeys();
+    gameState = 'PHASE_EVACUATION';
+    playerFloorLevel = '2F';
+    startTime = Date.now();
+    usedRouteB = false;
+    prevWarning = false;
+    totalStoppedTimeMs = 0;
+    initialStopTimeMs = 0;
+    hasStartedFirstMove = false;
+
+    mobileHud.classList.remove('hidden');
+    if (joystickZone) joystickZone.classList.remove('hidden');
+
+    if (hudTimerLabel) hudTimerLabel.innerText = "避難タイム";
+    setHudTimerText("0.0s");
+
+    // 【対照実験・グループB仕様】避難時ナビゲーションOFF：出口案内を行わない。「メインエントランスへ避難」とだけ表示
+    const distBadge = document.getElementById('hud-dist')?.closest('.stat-badge');
+    if (distBadge) distBadge.style.display = 'none';
+
+    if (arStatusDot) arStatusDot.style.background = "#ff3d00";
+    if (arNavIcon) arNavIcon.style.display = 'none'; // 矢印案内アイコン非表示（出口への方向案内なし）
+    if (arNavBadge) arNavBadge.innerText = "NAVI OFF";
+    if (arNavMsg) arNavMsg.innerText = "メインエントランスへ避難";
+    if (arNavBar) arNavBar.style.borderColor = "#ff3d00";
+  };
+
+  // ==========================================
+  // 【要件】事後アンケートURL設定
+  // ==========================================
+  let SURVEY_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfxbh8mHL7h1ESB1RklPi3GABvkn2J8xy2fNz0DLTccd-3Tmw/viewform";
+  window.setSurveyUrl = (url) => {
+    SURVEY_URL = url;
+    const btn = document.getElementById('btn-survey-link');
+    if (btn) btn.href = url;
+  };
+
+  const showResult = (finalTime, isB, finalStopped) => {
+    resetAllKeys();
+    gameState = 'RESULT';
+    soundGoal();
+    mobileHud.classList.add('hidden');
+    if (joystickZone) joystickZone.classList.add('hidden');
+    screenResult.classList.remove('hidden');
+    const rankEl = document.getElementById('res-rank');
+    const titleEl = document.getElementById('res-title');
+    const timeEl = document.getElementById('res-time');
+    const stoppedEl = document.getElementById('res-stopped-time');
+    const analysisEl = document.getElementById('res-analysis');
+
+    timeEl.innerText = `${finalTime} 秒`;
+    const stoppedSecStr = (finalStopped !== undefined) ? `${finalStopped} 秒` : `${(totalStoppedTimeMs / 1000).toFixed(1)} 秒`;
+    if (stoppedEl) stoppedEl.innerText = stoppedSecStr;
+
+    const surveyBtn = document.getElementById('btn-survey-link');
+    if (surveyBtn && SURVEY_URL) surveyBtn.href = SURVEY_URL;
+
+    // 【要件】右側の避難時間・停止時間・実質移動およびコメントを非表示化
+    if (analysisEl) {
+      analysisEl.innerHTML = '';
+      analysisEl.classList.add('hidden');
+    }
+
+    if (isB) {
+      rankEl.innerText = "S";
+      rankEl.className = "rank-circle rank-s";
+      titleEl.innerText = "避難成功！非常階段ルートで迅速脱出";
+    } else {
+      rankEl.innerText = "A";
+      rankEl.className = "rank-circle rank-s";
+      titleEl.innerText = "避難完了！メインエントランスへ脱出成功";
+    }
+  };
+  window.showResult = showResult;
+
+  // ==========================================
+  // 【要件⑨】バーチャル・アナログジョイスティック（360度自由移動）
+  // ==========================================
+  const updateJoystickPos = (clientX, clientY) => {
+    if (!joystickBase) return;
+    const rect = joystickBase.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = clientX - centerX;
+    const dy = clientY - centerY;
+    const dist = Math.hypot(dx, dy);
+
+    let clampedX = dx;
+    let clampedY = dy;
+    if (dist > MAX_JOYSTICK_RADIUS) {
+      clampedX = (dx / dist) * MAX_JOYSTICK_RADIUS;
+      clampedY = (dy / dist) * MAX_JOYSTICK_RADIUS;
+    }
+
+    if (joystickStick) {
+      joystickStick.style.transform = `translate(${clampedX}px, ${clampedY}px)`;
+    }
+    joystickVector.x = clampedX / MAX_JOYSTICK_RADIUS;
+    joystickVector.y = clampedY / MAX_JOYSTICK_RADIUS;
+
+    if (dist > 6 && gameState === 'TUTORIAL') {
+      tutProgress.moved = true;
+    }
+  };
+
+  // PCマウス用ジョイスティック操作
+  let isMouseDraggingJoystick = false;
+  if (joystickZone) {
+    joystickZone.addEventListener('mousedown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      initAudio();
+      isMouseDraggingJoystick = true;
+      if (joystickBase) joystickBase.classList.add('active');
+      updateJoystickPos(e.clientX, e.clientY);
+    });
+  }
+  window.addEventListener('mousemove', (e) => {
+    if (isMouseDraggingJoystick) {
+      updateJoystickPos(e.clientX, e.clientY);
+    }
+  });
+  window.addEventListener('mouseup', () => {
+    if (isMouseDraggingJoystick) {
+      isMouseDraggingJoystick = false;
+      resetJoystick();
+    }
+  });
+
+  window.addEventListener('blur', resetAllKeys);
+  window.addEventListener('touchcancel', resetAllKeys);
+
+  // キーボード操作フォールバック（PCテスト用）
+  window.addEventListener('keydown', (e) => {
+    initAudio();
+    if (['ArrowUp', 'w', 'ArrowDown', 's', 'ArrowLeft', 'a', 'ArrowRight', 'd'].includes(e.key)) {
+      if (gameState === 'TUTORIAL') tutProgress.moved = true;
+    }
+    if (e.key === 'ArrowUp' || e.key === 'w') moveState.up = true;
+    if (e.key === 'ArrowDown' || e.key === 's') moveState.down = true;
+    if (e.key === 'ArrowLeft' || e.key === 'a') moveState.left = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') moveState.right = true;
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'w') moveState.up = false;
+    if (e.key === 'ArrowDown' || e.key === 's') moveState.down = false;
+    if (e.key === 'ArrowLeft' || e.key === 'a') moveState.left = false;
+    if (e.key === 'ArrowRight' || e.key === 'd') moveState.right = false;
+  });
+
+  // ==========================================
+  // 【要件①・②・③・⑨】マルチタッチ統合ハンドラ
+  // （左手：360度アナログ移動 / 右手：上下左右360度視点回転）
+  // ==========================================
+
+  // タッチ開始
+  window.addEventListener('touchstart', (e) => {
+    // 1. UIボタン・モーダル・HUD・オーバーレイ上のタップはゲーム内移動・視点操作から完全に除外
+    if (e.target && (
+      e.target.closest('button') ||
+      e.target.closest('.ui-btn') ||
+      e.target.closest('.screen-overlay') ||
+      e.target.closest('#modal-tut-complete') ||
+      e.target.closest('#tut-floating-card') ||
+      e.target.closest('#ar-nav-bar') ||
+      e.target.closest('.hud-stats-row')
+    )) {
+      return;
+    }
+
+    if (gameState !== 'TUTORIAL' && gameState !== 'PHASE_INBOUND' && gameState !== 'PHASE_EVACUATION') return;
+
+    // 2. ゾンビタッチの自己修復（activeなtouchesリストにIDが存在しなければ自動解放）
+    if (lookTouchId !== null) {
+      let isStillActive = false;
+      for (let j = 0; j < e.touches.length; j++) {
+        if (e.touches[j].identifier === lookTouchId) {
+          isStillActive = true;
+          break;
+        }
+      }
+      if (!isStillActive) {
+        lookTouchId = null;
+      }
+    }
+    if (joystickTouchId !== null) {
+      let isStillActive = false;
+      for (let j = 0; j < e.touches.length; j++) {
+        if (e.touches[j].identifier === joystickTouchId) {
+          isStillActive = true;
+          break;
+        }
+      }
+      if (!isStillActive) {
+        resetJoystick();
+      }
+    }
+
+    // 3. 各指の割り当て（左40%：ジョイスティック / 右60%：視点移動）
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      const isLeftArea = (t.clientX < window.innerWidth * 0.40) || (e.target && e.target.closest('#joystick-zone'));
+      if (joystickTouchId === null && isLeftArea) {
+        joystickTouchId = t.identifier;
+        if (joystickBase) joystickBase.classList.add('active');
+        initAudio();
+        updateJoystickPos(t.clientX, t.clientY);
+        continue;
+      }
+
+      if (lookTouchId === null && t.clientX >= window.innerWidth * 0.40 && t.identifier !== joystickTouchId) {
+        lookTouchId = t.identifier;
+        lastLookX = t.clientX;
+        lastLookY = t.clientY;
+      }
+    }
+  }, { passive: true });
+
+  // タッチ移動
+  window.addEventListener('touchmove', (e) => {
+    if (gameState !== 'TUTORIAL' && gameState !== 'PHASE_INBOUND' && gameState !== 'PHASE_EVACUATION') return;
+
+    // ゾンビタッチ自己修復
+    if (lookTouchId !== null) {
+      let isStillActive = false;
+      for (let j = 0; j < e.touches.length; j++) {
+        if (e.touches[j].identifier === lookTouchId) {
+          isStillActive = true;
+          break;
+        }
+      }
+      if (!isStillActive) {
+        lookTouchId = null;
+      }
+    }
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      // ジョイスティック追従
+      if (t.identifier === joystickTouchId) {
+        updateJoystickPos(t.clientX, t.clientY);
+      }
+      // 視点移動追従
+      if (t.identifier === lookTouchId) {
+        const dx = t.clientX - lastLookX;
+        const dy = t.clientY - lastLookY;
+        lastLookX = t.clientX;
+        lastLookY = t.clientY;
+
+        const ctrl = getLookControls();
+        if (ctrl) {
+          // 左右反転（右スワイプで右向き、左スワイプで左向き）
+          if (ctrl.yawObject) {
+            ctrl.yawObject.rotation.y -= dx * LOOK_SENSITIVITY_X;
+          }
+          // 上下視点移動（チルト ±75度）
+          if (ctrl.pitchObject) {
+            const nextPitch = ctrl.pitchObject.rotation.x - dy * LOOK_SENSITIVITY_Y;
+            ctrl.pitchObject.rotation.x = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, nextPitch));
+          }
+        }
+      }
+    }
+  }, { passive: true });
+
+  // タッチ終了
+  const onTouchEndHandler = (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === joystickTouchId) {
+        resetJoystick();
+      }
+      if (t.identifier === lookTouchId) {
+        lookTouchId = null;
+      }
+    }
+    // 画面上にタッチが1本もなければ確実に全状態をクリア
+    if (!e.touches || e.touches.length === 0) {
+      resetAllKeys();
+    }
+  };
+  window.addEventListener('touchend', onTouchEndHandler, { passive: true });
+  window.addEventListener('touchcancel', () => {
+    resetAllKeys();
+  }, { passive: true });
+
+  // PCマウス操作用（ドラッグによる上下左右視点操作）
+  window.addEventListener('mousedown', (e) => {
+    if (gameState !== 'TUTORIAL' && gameState !== 'PHASE_INBOUND' && gameState !== 'PHASE_EVACUATION') return;
+    if (e.target.closest('#joystick-zone') || e.target.closest('button') || e.target.closest('.ui-btn') || e.target.closest('.screen-overlay')) return;
+    isMouseDownLook = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!isMouseDownLook) return;
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    const ctrl = getLookControls();
+    if (ctrl) {
+      if (ctrl.yawObject) {
+        ctrl.yawObject.rotation.y -= dx * LOOK_SENSITIVITY_X;
+      }
+      if (ctrl.pitchObject) {
+        const nextPitch = ctrl.pitchObject.rotation.x - dy * LOOK_SENSITIVITY_Y;
+        ctrl.pitchObject.rotation.x = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, nextPitch));
+      }
+    }
+  });
+  window.addEventListener('mouseup', () => { isMouseDownLook = false; });
+
+  // 目標地点に対する相対方位からナビ矢印と案内テキストを動的算出
+  function getNaviArrow(targetX, targetZ, currentX, currentZ, yawRad, destLabel = "目的地") {
+    const dx = targetX - currentX;
+    const dz = targetZ - currentZ;
+    const targetYawDeg = Math.atan2(-dx, -dz) * 180 / Math.PI;
+    const currentYawDeg = yawRad * 180 / Math.PI;
+
+    let relDeg = targetYawDeg - currentYawDeg;
+    while (relDeg > 180) relDeg -= 360;
+    while (relDeg < -180) relDeg += 360;
+
+    if (relDeg >= -25 && relDeg <= 25) {
+      return { icon: "↑", guide: `直進して${destLabel}へ` };
+    } else if (relDeg > 25 && relDeg <= 70) {
+      return { icon: "↖", guide: `左斜め前の${destLabel}へ` };
+    } else if (relDeg > 70 && relDeg <= 115) {
+      return { icon: "⬅", guide: `左方向の${destLabel}へ` };
+    } else if (relDeg > 115 && relDeg <= 160) {
+      return { icon: "↙", guide: `左後方の${destLabel}へ` };
+    } else if (relDeg < -25 && relDeg >= -70) {
+      return { icon: "↗", guide: `右斜め前の${destLabel}へ` };
+    } else if (relDeg < -70 && relDeg >= -115) {
+      return { icon: "➡", guide: `右方向の${destLabel}へ` };
+    } else if (relDeg < -115 && relDeg >= -160) {
+      return { icon: "↘", guide: `右後方の${destLabel}へ` };
+    } else {
+      return { icon: "↓", guide: `振り返って${destLabel}へ` };
+    }
+  }
+
+  // ==========================================
+  // 全画面表示（Fullscreen API）制御
+  // ==========================================
+  const requestFullscreenMode = () => {
+    const docEl = document.documentElement;
+    const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+    if (req) {
+      try {
+        const p = req.call(docEl);
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
+    } else {
+      // iOS Safariなどブラウザ自体のFull Screen API非対応環境への配慮
+      showIosToast();
+    }
+  };
+
+  const exitFullscreenMode = () => {
+    const doc = document;
+    const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+    if (exit) {
+      try {
+        const p = exit.call(doc);
+        if (p && p.catch) p.catch(() => {});
+      } catch (e) {}
+    }
+  };
+
+  const isFullscreenActive = () => {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+  };
+
+  const toggleFullscreen = () => {
+    initAudio();
+    if (!isFullscreenActive()) {
+      requestFullscreenMode();
+    } else {
+      exitFullscreenMode();
+    }
+  };
+
+  let toastTimer = null;
+  const showIosToast = () => {
+    const toast = document.getElementById('ios-pwa-toast');
+    if (!toast) return;
+    toast.classList.remove('hidden');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 5000);
+  };
+
+  const updateFullscreenUI = () => {
+    const active = isFullscreenActive();
+    const titleBtn = document.getElementById('btn-title-fullscreen');
+    if (titleBtn) {
+      const icon = titleBtn.querySelector('.fs-icon');
+      const text = titleBtn.querySelector('.fs-text');
+      if (icon) icon.innerText = active ? "🗗" : "⛶";
+      if (text) text.innerText = active ? "全画面を解除" : "全画面表示にする（推奨）";
+      if (active) {
+        titleBtn.classList.add('is-fullscreen');
+      } else {
+        titleBtn.classList.remove('is-fullscreen');
+      }
+    }
+    const hudBtn = document.getElementById('btn-hud-fullscreen');
+    if (hudBtn) {
+      hudBtn.innerText = active ? "🗗" : "⛶";
+    }
+  };
+
+  document.addEventListener('fullscreenchange', updateFullscreenUI);
+  document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
+  document.addEventListener('mozfullscreenchange', updateFullscreenUI);
+
+  // ==========================================
+  // 高速・確実なマルチプラットフォーム（スマホタッチ＆PCクリック）ボタンバインディング
+  // ==========================================
+  const bindFastTap = (elemOrId, callback) => {
+    const el = (typeof elemOrId === 'string') ? document.getElementById(elemOrId) : elemOrId;
+    if (!el) return;
+    let handled = false;
+    const trigger = (e) => {
+      if (handled) return;
+      handled = true;
+      setTimeout(() => { handled = false; }, 350);
+      try {
+        initAudio();
+      } catch (err) {}
+      resetAllKeys(); // ボタン操作完了時に全タッチ・移動・視点状態を確実にリセット
+      try {
+        callback(e);
+      } catch (err) {
+        console.error('Button action error:', err);
+      }
+    };
+    el.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      trigger(e);
+    }, { passive: false });
+    el.addEventListener('click', (e) => {
+      trigger(e);
+    });
+    el.addEventListener('pointerup', (e) => {
+      trigger(e);
+    });
+  };
+
+  bindFastTap('btn-start-tut', () => {
+    try {
+      requestFullscreenMode();
+    } catch (e) {}
+    startTutorial();
+  });
+
+  bindFastTap('btn-start-main-direct', () => {
+    try {
+      requestFullscreenMode();
+    } catch (e) {}
+    startInboundPhase();
+  });
+
+  bindFastTap('btn-skip-tut', startInboundPhase);
+  bindFastTap('btn-tut-go-main', startInboundPhase);
+  bindFastTap('btn-hud-reset', startInboundPhase);
+  bindFastTap('btn-start-evac', startEvacuationPhase);
+
+  const btnResetView = document.getElementById('btn-reset-view');
+  if (btnResetView) {
+    bindFastTap(btnResetView, () => {
+      if (gameState === 'PHASE_INBOUND') {
+        resetCamView(180);
+      } else {
+        resetCamView(0);
+      }
+    });
+  }
+
+  const btnTitleFs = document.getElementById('btn-title-fullscreen');
+  if (btnTitleFs) bindFastTap(btnTitleFs, toggleFullscreen);
+
+  const btnHudFs = document.getElementById('btn-hud-fullscreen');
+  if (btnHudFs) bindFastTap(btnHudFs, toggleFullscreen);
+
+  // ==========================================
+  // エスカレーター避難混雑群衆（人型オブジェクト群）生成
+  // ※【要件】二階オブジェクト到達後表示・当たり判定なし
+  // ==========================================
+  const crowdMembers = [];
+  let crowdGroupObj = null;
+
+  const initEscalatorCrowd = () => {
+    const crowdEl = document.getElementById('escalator-crowd');
+    if (!crowdEl) return;
+    if (!crowdEl.object3D) {
+      crowdEl.addEventListener('loaded', initEscalatorCrowd);
+      return;
+    }
+    if (crowdGroupObj) return; // 二重初期化防止
+    crowdGroupObj = crowdEl.object3D;
+
+    // 共有ジオメトリ（モバイル超軽量・メモリ最小化）
+    const headGeo = new THREE.SphereGeometry(0.13, 8, 8);
+    const hairGeo = new THREE.SphereGeometry(0.135, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.5);
+    const torsoGeo = new THREE.BoxGeometry(0.44, 0.62, 0.28);
+    const armGeo = new THREE.BoxGeometry(0.12, 0.52, 0.13);
+    const legsGeo = new THREE.BoxGeometry(0.38, 0.74, 0.24);
+
+    // 多彩なカジュアル服・髪・肌のカラーパレット
+    const shirtHexes = [
+      0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6,
+      0x34495e, 0x1abc9c, 0xd35400, 0x7f8c8d, 0x2c3e50,
+      0xe67e22, 0xbdc3c7, 0x16a085, 0xc0392b, 0x27ae60
+    ];
+    const pantsHexes = [0x2c3e50, 0x1e272e, 0x57606f, 0x2f3542, 0x3d3d3d, 0x111111];
+    const skinHexes = [0xf5cd79, 0xe0ac69, 0xf7d794, 0xd29054, 0xecb176];
+    const hairHexes = [0x1e272e, 0x2c3e50, 0x3d3d3d, 0x4a3728, 0x111111];
+
+    const shirtMats = shirtHexes.map(c => new THREE.MeshLambertMaterial({ color: c }));
+    const pantsMats = pantsHexes.map(c => new THREE.MeshLambertMaterial({ color: c }));
+    const skinMats = skinHexes.map(c => new THREE.MeshLambertMaterial({ color: c }));
+    const hairMats = hairHexes.map(c => new THREE.MeshLambertMaterial({ color: c }));
+
+    const crowdData = [
+      // --- A. エスカレーター斜面（Z: 7.2 〜 -3.8）：各段に2〜3人ずつ密集して降下 ---
+      { x: -0.6, z: 7.2, rotY: 0 },
+      { x:  0.5, z: 7.0, rotY: -0.1 },
+      { x: -0.7, z: 6.2, rotY: 0.1 },
+      { x:  0.4, z: 6.0, rotY: 0 },
+      { x: -0.2, z: 5.3, rotY: -0.1 },
+      { x:  0.6, z: 5.1, rotY: 0.1 },
+      { x: -0.6, z: 4.3, rotY: 0 },
+      { x:  0.3, z: 4.1, rotY: -0.1 },
+      { x: -0.3, z: 3.3, rotY: 0.1 },
+      { x:  0.6, z: 3.1, rotY: 0 },
+      { x: -0.6, z: 2.3, rotY: -0.1 },
+      { x:  0.4, z: 2.1, rotY: 0.1 },
+      { x: -0.2, z: 1.3, rotY: 0 },
+      { x:  0.5, z: 1.1, rotY: -0.1 },
+      { x: -0.6, z: 0.3, rotY: 0.1 },
+      { x:  0.3, z: 0.1, rotY: 0 },
+      { x: -0.3, z: -0.7, rotY: -0.1 },
+      { x:  0.5, z: -0.9, rotY: 0.1 },
+      { x: -0.6, z: -1.7, rotY: 0 },
+      { x:  0.3, z: -1.9, rotY: -0.1 },
+      { x: -0.3, z: -2.7, rotY: 0.1 },
+      { x:  0.5, z: -2.9, rotY: 0 },
+      { x: -0.5, z: -3.6, rotY: -0.1 },
+      { x:  0.4, z: -3.8, rotY: 0.1 },
+
+      // --- B. 2階エスカレーター乗り口（Z: 7.6 〜 13.9）：押し寄せる群衆ファンネル ---
+      // 最前列（乗り口直前・黄線付近）
+      { x: -1.3, z: 7.9, rotY: 0.15 },
+      { x: -0.7, z: 7.8, rotY: 0.05 },
+      { x:  0.0, z: 7.7, rotY: 0 },
+      { x:  0.7, z: 7.8, rotY: -0.05 },
+      { x:  1.3, z: 7.9, rotY: -0.15 },
+
+      // 第2列（背後から押し寄せる列）
+      { x: -1.7, z: 8.6, rotY: 0.2 },
+      { x: -1.0, z: 8.5, rotY: 0.1 },
+      { x: -0.3, z: 8.7, rotY: 0 },
+      { x:  0.4, z: 8.5, rotY: -0.1 },
+      { x:  1.1, z: 8.6, rotY: -0.15 },
+      { x:  1.8, z: 8.7, rotY: -0.2 },
+
+      // 第3列（扇状に広がる待機群衆）
+      { x: -2.3, z: 9.4, rotY: 0.35 },
+      { x: -1.5, z: 9.6, rotY: 0.2 },
+      { x: -0.7, z: 9.3, rotY: 0.05 },
+      { x:  0.1, z: 9.5, rotY: -0.05 },
+      { x:  0.9, z: 9.4, rotY: -0.2 },
+      { x:  1.7, z: 9.6, rotY: -0.3 },
+      { x:  2.5, z: 9.3, rotY: -0.4 },
+
+      // 第4列（通路奥・店舗前から殺到する群衆）
+      { x: -2.8, z: 10.8, rotY: 0.4 },
+      { x: -1.7, z: 11.2, rotY: 0.25 },
+      { x: -0.6, z: 10.7, rotY: 0.1 },
+      { x:  0.6, z: 11.0, rotY: -0.1 },
+      { x:  1.7, z: 10.8, rotY: -0.25 },
+      { x:  2.8, z: 11.2, rotY: -0.4 },
+      { x: -2.0, z: 12.5, rotY: 0.3 },
+      { x: -0.5, z: 12.8, rotY: 0.1 },
+      { x:  0.8, z: 12.4, rotY: -0.15 },
+      { x:  2.2, z: 12.7, rotY: -0.35 },
+      { x: -1.2, z: 13.8, rotY: 0.15 },
+      { x:  0.3, z: 13.6, rotY: 0 },
+      { x:  1.6, z: 13.9, rotY: -0.2 },
+
+      // --- C. 1階降り口（Z: -4.3 〜 -7.5）：1階へ溢れ出る人々 ---
+      { x: -0.8, z: -4.5, rotY: 0 },
+      { x:  0.5, z: -4.6, rotY: 0 },
+      { x: -1.3, z: -5.5, rotY: -0.1 },
+      { x: -0.3, z: -5.8, rotY: 0 },
+      { x:  0.8, z: -5.4, rotY: 0.1 },
+      { x: -0.9, z: -6.8, rotY: -0.05 },
+      { x:  0.2, z: -7.2, rotY: 0 },
+      { x:  1.3, z: -6.6, rotY: 0.1 }
+    ];
+
+    crowdData.forEach((d, idx) => {
+      const personGroup = new THREE.Group();
+
+      let yFloor = 0.0;
+      let pitchAngle = 0.0;
+      if (d.z <= 7.5 && d.z >= -4.0) {
+        // エスカレーター斜面高さ
+        yFloor = ((d.z - 7.5) / -11.5) * -5.0;
+        pitchAngle = 0.14; // 斜面を降りる前傾姿勢
+      } else if (d.z < -4.0) {
+        // 1階床
+        yFloor = -5.0;
+      } else {
+        // 2階床
+        yFloor = 0.0;
+      }
+
+      const shirtMat = shirtMats[idx % shirtMats.length];
+      const pantsMat = pantsMats[(idx * 3) % pantsMats.length];
+      const skinMat = skinMats[(idx * 2) % skinMats.length];
+      const hairMat = hairMats[(idx * 4) % hairMats.length];
+
+      // 脚部
+      const legsMesh = new THREE.Mesh(legsGeo, pantsMat);
+      legsMesh.position.y = 0.37;
+      personGroup.add(legsMesh);
+
+      // 胴体
+      const torsoMesh = new THREE.Mesh(torsoGeo, shirtMat);
+      torsoMesh.position.y = 1.05;
+      personGroup.add(torsoMesh);
+
+      // 腕部（左右：小走りのような腕振りポーズ）
+      const armSwing = Math.sin(idx * 1.5) * 0.25;
+      const leftArm = new THREE.Mesh(armGeo, shirtMat);
+      leftArm.position.set(-0.28, 1.05, 0.04);
+      leftArm.rotation.x = 0.2 + armSwing;
+      personGroup.add(leftArm);
+
+      const rightArm = new THREE.Mesh(armGeo, shirtMat);
+      rightArm.position.set(0.28, 1.05, 0.04);
+      rightArm.rotation.x = 0.2 - armSwing;
+      personGroup.add(rightArm);
+
+      // 頭部
+      const headMesh = new THREE.Mesh(headGeo, skinMat);
+      headMesh.position.y = 1.48;
+      personGroup.add(headMesh);
+
+      // 髪の毛
+      const hairMesh = new THREE.Mesh(hairGeo, hairMat);
+      hairMesh.position.y = 1.50;
+      personGroup.add(hairMesh);
+
+      // 【要件②】エスカレーター前（2階乗り口 Z > 7.5）の人の背の高さを高く設定（約1.95m〜2.2m）
+      const isFrontOfEscalator = d.z > 7.5;
+      const heightScale = isFrontOfEscalator ? (1.32 + ((idx % 4) * 0.04)) : 1.15; // 1.32〜1.44倍（大人・大柄な体格）
+      const widthScale = isFrontOfEscalator ? 1.15 : 1.05;
+      personGroup.scale.set(widthScale, heightScale, widthScale);
+
+      personGroup.position.set(d.x, yFloor, d.z);
+      personGroup.rotation.y = d.rotY;
+      personGroup.rotation.x = pitchAngle;
+
+      crowdGroupObj.add(personGroup);
+
+      crowdMembers.push({
+        group: personGroup,
+        baseY: yFloor,
+        baseRotY: d.rotY,
+        seed: idx * 0.7
+      });
+    });
+  };
+
+  // ==========================================
+  // 【要件】「非常階段」看板 ＆ 天井「避難誘導灯」CanvasTexture 生成
+  // ==========================================
+  const initSignTextures = () => {
+    // 1. 梁上看板「非常階段」
+    const canvasStairs = document.createElement('canvas');
+    canvasStairs.width = 512;
+    canvasStairs.height = 128;
+    const ctxS = canvasStairs.getContext('2d');
+    ctxS.fillStyle = '#1e824c'; // 深い誘導グリーン
+    ctxS.fillRect(0, 0, 512, 128);
+    // 白フチ枠
+    ctxS.strokeStyle = '#ffffff';
+    ctxS.lineWidth = 8;
+    ctxS.strokeRect(6, 6, 500, 116);
+    // 「非常階段」白太字テキスト
+    ctxS.fillStyle = '#ffffff';
+    ctxS.font = 'bold 64px "Hiragino Kaku Gothic ProN", "Meiryo", "Noto Sans JP", sans-serif';
+    ctxS.textAlign = 'center';
+    ctxS.textBaseline = 'middle';
+    ctxS.fillText('非常階段', 256, 64);
+
+    const texStairs = new THREE.CanvasTexture(canvasStairs);
+    if (typeof THREE.SRGBColorSpace !== 'undefined') {
+      texStairs.colorSpace = THREE.SRGBColorSpace;
+    }
+
+    const assignTex = (id, tex) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const apply = () => {
+        const mesh = el.getObject3D('mesh');
+        if (mesh && mesh.material) {
+          mesh.material.map = tex;
+          mesh.material.needsUpdate = true;
+        }
+      };
+      if (el.getObject3D('mesh')) {
+        apply();
+      } else {
+        el.addEventListener('loaded', apply, { once: true });
+      }
+    };
+
+    assignTex('stairs-wall-sign', texStairs);
+
+    // 2. 天井避難誘導灯（一回り大型化・1024x512 高精細レンダリング）
+    const canvasLight = document.createElement('canvas');
+    canvasLight.width = 1024;
+    canvasLight.height = 512;
+    const ctxL = canvasLight.getContext('2d');
+    ctxL.fillStyle = '#00a651'; // 誘導灯グリーン
+    ctxL.fillRect(0, 0, 1024, 512);
+    // 白フチ枠
+    ctxL.strokeStyle = '#ffffff';
+    ctxL.lineWidth = 16;
+    ctxL.strokeRect(12, 12, 1000, 488);
+
+    // 非常口ピクトグラム（人が非常口へ脱出するピクトマーク）
+    ctxL.fillStyle = '#ffffff';
+    // 走る人の頭
+    ctxL.beginPath();
+    ctxL.arc(240, 136, 44, 0, Math.PI * 2);
+    ctxL.fill();
+    // 走る人の胴体・手足
+    ctxL.beginPath();
+    ctxL.moveTo(224, 188);
+    ctxL.lineTo(284, 244);
+    ctxL.lineTo(344, 232);
+    ctxL.lineTo(304, 284);
+    ctxL.lineTo(248, 276);
+    ctxL.lineTo(216, 344);
+    ctxL.lineTo(132, 424);
+    ctxL.lineTo(168, 444);
+    ctxL.lineTo(244, 364);
+    ctxL.lineTo(276, 444);
+    ctxL.lineTo(324, 432);
+    ctxL.lineTo(280, 324);
+    ctxL.lineTo(248, 256);
+    ctxL.lineTo(240, 188);
+    ctxL.closePath();
+    ctxL.fill();
+
+    // 脱出ドア枠
+    ctxL.fillRect(80, 84, 32, 344);
+    ctxL.fillRect(80, 84, 170, 32);
+
+    // テキスト「非常階段」＆「EXIT」
+    ctxL.font = 'bold 128px "Hiragino Kaku Gothic ProN", "Meiryo", "Noto Sans JP", sans-serif';
+    ctxL.textAlign = 'center';
+    ctxL.textBaseline = 'alphabetic';
+    ctxL.fillText('非常階段', 690, 250);
+    ctxL.font = 'bold 72px "Segoe UI", Arial, sans-serif';
+    ctxL.fillText('EXIT', 690, 370);
+
+    const texLight = new THREE.CanvasTexture(canvasLight);
+    if (typeof THREE.SRGBColorSpace !== 'undefined') {
+      texLight.colorSpace = THREE.SRGBColorSpace;
+    }
+
+    assignTex('guide-light-sign', texLight);
+    assignTex('guide-light-sign-back', texLight);
+
+    // 3. 1階「メインエントランス」壁面固定看板（1024x256 高精細レンダリング）
+    const canvasMainEnt = document.createElement('canvas');
+    canvasMainEnt.width = 1024;
+    canvasMainEnt.height = 256;
+    const ctxM = canvasMainEnt.getContext('2d');
+    ctxM.fillStyle = '#1e272e';
+    ctxM.fillRect(0, 0, 1024, 256);
+    ctxM.strokeStyle = '#00e676';
+    ctxM.lineWidth = 8;
+    ctxM.strokeRect(6, 6, 1012, 244);
+
+    ctxM.fillStyle = '#ffffff';
+    ctxM.font = '900 102px "Hiragino Kaku Gothic ProN", "Meiryo", "Noto Sans JP", sans-serif';
+    ctxM.textAlign = 'center';
+    ctxM.textBaseline = 'middle';
+    ctxM.fillText('メインエントランス', 512, 95);
+
+    ctxM.fillStyle = '#00e676';
+    ctxM.font = 'bold 44px "Segoe UI", Arial, sans-serif';
+    ctxM.letterSpacing = '4px';
+    ctxM.fillText('MAIN ENTRANCE', 512, 185);
+
+    const texMainEnt = new THREE.CanvasTexture(canvasMainEnt);
+    if (typeof THREE.SRGBColorSpace !== 'undefined') {
+      texMainEnt.colorSpace = THREE.SRGBColorSpace;
+    }
+    assignTex('main-entrance-plate', texMainEnt);
+  };
+
+  const sceneEl = document.querySelector('a-scene');
+  if (sceneEl.hasLoaded) {
+    setPlayerPosition(0, -3.4, -34);
+    resetCamView(180);
+    initEscalatorCrowd();
+    initSignTextures();
+  } else {
+    sceneEl.addEventListener('loaded', () => {
+      setPlayerPosition(0, -3.4, -34);
+      resetCamView(180);
+      initEscalatorCrowd();
+      initSignTextures();
+    });
+  }
+
+  // ==========================================
+  // スマホブラウザ最適化メインループ（requestAnimationFrame + デルタタイム補正）
+  // ==========================================
+  let lastFrameTime = performance.now();
+
+  const gameLoop = (now) => {
+    requestAnimationFrame(gameLoop);
+
+    const dt = now - lastFrameTime;
+    lastFrameTime = now;
+    // フレームレート変動（30fps〜120fps）に関わらず一定の移動速度を保つ係数（基準60fps = 16.67ms）
+    const dtScale = Math.min(dt / 16.667, 2.5);
+
+    // 群衆の微細アニメーション（混雑で足踏み・身動きするリアルな表現）
+    if (crowdGroupObj && escalatorCrowd && escalatorCrowd.getAttribute('visible') === 'true') {
+      const crowdTime = now * 0.003;
+      for (let i = 0; i < crowdMembers.length; i++) {
+        const m = crowdMembers[i];
+        m.group.position.y = m.baseY + Math.sin(crowdTime * 3 + m.seed) * 0.012;
+        m.group.rotation.y = m.baseRotY + Math.sin(crowdTime * 2 + m.seed) * 0.04;
+      }
+    }
+
+    // アクティブ操作フェーズ以外は処理をスキップしてバッテリー・CPU消費を節約
+    if (gameState !== 'TUTORIAL' && gameState !== 'PHASE_INBOUND' && gameState !== 'PHASE_EVACUATION') {
+      return;
+    }
+
+    // look-controls内部のyawObjectから正確なYaw角を取得
+    let camYawRad = 0;
+    if (cam && cam.components && cam.components['look-controls'] && cam.components['look-controls'].yawObject) {
+      camYawRad = cam.components['look-controls'].yawObject.rotation.y;
+    } else if (cam && cam.object3D) {
+      camYawRad = cam.object3D.rotation.y || 0;
+    }
+
+    // ------------------------------------------
+    // STEP ①: チュートリアル中
+    // ------------------------------------------
+    if (gameState === 'TUTORIAL') {
+      const currentYawDeg = camYawRad * 180 / Math.PI;
+      const ctrl = getLookControls();
+      const currentPitchDeg = (ctrl && ctrl.pitchObject) ? (ctrl.pitchObject.rotation.x * 180 / Math.PI) : 0;
+
+      // 左右または上下に視点を動かしたらクリア判定
+      if (!tutProgress.looked && (Math.abs(currentYawDeg - tutInitialYaw) > 12 || Math.abs(currentPitchDeg) > 10)) {
+        tutProgress.looked = true;
+        tutChkLook.classList.add('done');
+        soundBeep();
+      }
+      if (tutProgress.moved && !tutChkMove.classList.contains('done')) {
+        tutChkMove.classList.add('done');
+      }
+
+      const speed = 0.09 * dtScale;
+      let inputForward = -joystickVector.y;
+      let inputSide = joystickVector.x;
+      if (moveState.up) inputForward += 1;
+      if (moveState.down) inputForward -= 1;
+      if (moveState.left) inputSide -= 1;
+      if (moveState.right) inputSide += 1;
+
+      const inputMag = Math.hypot(inputForward, inputSide);
+      if (inputMag > 0.05) {
+        tutProgress.moved = true;
+        const normF = inputForward / Math.max(1.0, inputMag);
+        const normS = inputSide / Math.max(1.0, inputMag);
+        const actualMag = Math.min(1.0, inputMag);
+        const moveStep = speed * actualMag;
+        const dx = (-Math.sin(camYawRad) * normF + Math.cos(camYawRad) * normS) * moveStep;
+        const dz = (-Math.cos(camYawRad) * normF - Math.sin(camYawRad) * normS) * moveStep;
+
+        let nx = Math.max(143.5, Math.min(156.5, playerPos.x + dx));
+        let nz = Math.max(-6.8, Math.min(6.8, playerPos.z + dz));
+        setPlayerPosition(nx, 1.6, nz);
+      }
+
+      const dist = Math.hypot(playerPos.x - 150, playerPos.z - (-3));
+      if (dist < 1.3 && !tutProgress.reached) {
+        tutProgress.reached = true;
+        tutChkReach.classList.add('done');
+        soundBeep();
+      }
+      if (tutProgress.looked && tutProgress.moved && tutProgress.reached) {
+        modalTutComplete.classList.remove('hidden');
+      }
+      return;
+    }
+
+    // ------------------------------------------
+    // STEP ②（1F入口 -> 2F緑オブジェクト）＆ STEP ③（災害避難：2F緑オブジェクト -> 1F入口）共通移動処理
+    // ------------------------------------------
+    let baseSpeed = 0.095;
+    let isEscalatorCrowdFront = false; // エスカレーター手前に人がおるあたり（速度 0.3）
+    let isEscalatorSlopeCrowd = false; // エスカレーター本体（速度 0.18）
+
+    // 【要件】避難時（STEP ③）における2段階速度制御
+    // 1. エスカレーター本体（斜面・ステップ上）: スピード 0.18
+    // 2. エスカレーター手前の人がおるあたり: スピード 0.3（混雑感知）
+    if (gameState === 'PHASE_EVACUATION') {
+      if (playerPos.x >= -2.2 && playerPos.x <= 2.2 && playerPos.z >= -4.0 && playerPos.z <= 7.2) {
+        baseSpeed = 0.0114; // 0.18m/s相当（通常1.5m/s: 0.095 × 0.18 / 1.5）
+        isEscalatorSlopeCrowd = true;
+        if (hudSpeed) hudSpeed.innerText = "0.18m/s (大混雑)";
+      } else if (playerPos.x >= -3.5 && playerPos.x <= 3.5 && playerPos.z > 7.2 && playerPos.z <= 13.5) {
+        baseSpeed = 0.019; // 0.3m/s相当（通常1.5m/s: 0.095 × 0.3 / 1.5）
+        isEscalatorCrowdFront = true;
+        if (hudSpeed) hudSpeed.innerText = "0.3m/s (混雑)";
+      } else {
+        if (hudSpeed) hudSpeed.innerText = "1.5m/s";
+      }
+    } else {
+      if (hudSpeed) hudSpeed.innerText = "1.5m/s";
+    }
+    const speed = baseSpeed * dtScale;
+    let inputForward = -joystickVector.y;
+    let inputSide = joystickVector.x;
+    if (moveState.up) inputForward += 1;
+    if (moveState.down) inputForward -= 1;
+    if (moveState.left) inputSide -= 1;
+    if (moveState.right) inputSide += 1;
+
+    let posX = playerPos.x;
+    let posY = playerPos.y;
+    let posZ = playerPos.z;
+
+    const inputMag = Math.hypot(inputForward, inputSide);
+    let actualMovedDist = 0;
+    if (inputMag > 0.05) {
+      const prevX = posX;
+      const prevZ = posZ;
+      const normF = inputForward / Math.max(1.0, inputMag);
+      const normS = inputSide / Math.max(1.0, inputMag);
+      const actualMag = Math.min(1.0, inputMag);
+      const moveStep = speed * actualMag;
+      const dx = (-Math.sin(camYawRad) * normF + Math.cos(camYawRad) * normS) * moveStep;
+      const dz = (-Math.cos(camYawRad) * normF - Math.sin(camYawRad) * normS) * moveStep;
+
+      const testX = posX + dx;
+      if (!checkCollision(testX, posZ, posY)) {
+        posX = testX;
+      }
+      const testZ = posZ + dz;
+      if (!checkCollision(posX, testZ, posY)) {
+        posZ = testZ;
+      }
+      actualMovedDist = Math.hypot(posX - prevX, posZ - prevZ);
+    }
+
+    // 【要件】避難時の停止時間を計測（移動していない時間。視点移動のみでも停止時間として記録）
+    if (gameState === 'PHASE_EVACUATION') {
+      const isPlayerMoving = (inputMag > 0.05) && (actualMovedDist > 0.0002);
+      const frameDt = Math.min(dt, 200); // 異常値ガード
+      if (!isPlayerMoving) {
+        totalStoppedTimeMs += frameDt;
+        if (!hasStartedFirstMove) {
+          initialStopTimeMs += frameDt;
+        }
+      } else {
+        hasStartedFirstMove = true;
+      }
+    }
+
+    // フロア判定＆階段昇降ロジック（1F⇔2F 双方向シームレス昇降）
+    let floorY = (playerFloorLevel === '1F') ? -5.0 : 0.0;
+
+    // 1. 非常階段ルートによる昇降（x < -7.5）
+    if (posX < -7.5) {
+      if (posZ <= 6.0 && posZ >= -8.0) {
+        floorY = ((posZ - 6.0) / -14.0) * -5.0;
+        if (gameState === 'PHASE_EVACUATION') usedRouteB = true;
+        playerFloorLevel = (posZ < -1.0) ? '1F' : '2F';
+      } else if (posZ < -8.0) {
+        floorY = -5.0;
+        if (gameState === 'PHASE_EVACUATION') usedRouteB = true;
+        playerFloorLevel = '1F';
+      } else {
+        floorY = 0.0;
+        playerFloorLevel = '2F';
+      }
+    }
+    // 2. 中央階段／エスカレーター（x: -2.0 〜 2.0 かつ z: -4.0 〜 7.5）: 1F⇔2F 双方向昇降
+    else if (posX >= -2.0 && posX <= 2.0 && posZ <= 7.5 && posZ >= -4.0) {
+      floorY = ((posZ - 7.5) / -11.5) * -5.0;
+      if (posZ >= 7.0) {
+        floorY = 0.0;
+        playerFloorLevel = '2F';
+      } else if (posZ <= -3.6) {
+        floorY = -5.0;
+        playerFloorLevel = '1F';
+      }
+    }
+    // 3. 1階フロア維持
+    else if (playerFloorLevel === '1F') {
+      floorY = -5.0;
+    }
+    // 4. 2階フロア維持
+    else {
+      floorY = 0.0;
+      playerFloorLevel = '2F';
+    }
+
+    posY = floorY + 1.6;
+    setPlayerPosition(posX, posY, posZ);
+
+    // ------------------------------------------
+    // STEP ②: 1階 Main Entrance から 2階の緑のオブジェクト (0, 0, 30) への誘導＆到達判定
+    // ------------------------------------------
+    if (gameState === 'PHASE_INBOUND') {
+      const distTo2FGreen = Math.hypot(posX - 0, posZ - 30.0);
+      const heightDiff = Math.abs(floorY - 0.0);
+      setHudDistText(`${Math.max(0, Math.round(distTo2FGreen + heightDiff))}m`);
+
+      if (posY <= -2.0) {
+        // 1階にいる時：中央階段の登り口 (0, -4.0) へ誘導
+        if (posZ < -5.5) {
+          const nav = getNaviArrow(0, -4.0, posX, posZ, camYawRad, "エスカレーター（2F行き）");
+          updateARHud(nav.icon, `${nav.guide}進んでください`, "#00e676", "STEP ② : 1F -> 2F");
+        } else {
+          const nav = getNaviArrow(0, 7.5, posX, posZ, camYawRad, "エスカレーター");
+          updateARHud(nav.icon, "エスカレーターを上って2階フロアへ進んでください", "#00e676", "STEP ② : 1F -> 2F");
+        }
+      } else {
+        // 2階またはエスカレーター上部に上がった時：2階奥の緑のオブジェクト (0, 30.0) へ誘導
+        if (distTo2FGreen <= 6.0) {
+          updateARHud("★", "目前の「2階の緑のオブジェクト」に入ってください！", "#00e676", "STEP ② : CHECKPOINT");
+        } else {
+          const nav = getNaviArrow(0, 30.0, posX, posZ, camYawRad, "2階の緑のオブジェクト");
+          updateARHud(nav.icon, nav.guide, "#00e676", "STEP ② : 2F移動中");
+        }
+      }
+
+      // 2階の緑のオブジェクト (0, 0, 30) に到達したら STEP ③（災害発生！）へ遷移
+      if (distTo2FGreen <= 2.0 && posY >= 1.0) {
+        triggerDisaster();
+      }
+      return;
+    }
+
+    // ------------------------------------------
+    // STEP ③: 災害発生後、2階の緑のオブジェクトから 1階 Main Entrance (0, -5, -34) への避難
+    // 【対照実験・グループB仕様】避難時のナビゲーションをオフにし、出口への案内を行わない。「メインエントランスへ避難」とだけ表示
+    // ------------------------------------------
+    if (gameState === 'PHASE_EVACUATION') {
+      if (startTime !== null) {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        setHudTimerText(`${elapsed}s`);
+      }
+
+      const goalDist = Math.hypot(posX - 0, posZ - (-34.0));
+
+      // ナビゲーションOFF：出口案内を行わず、「メインエントランスへ避難」とだけ固定表示
+      if (arNavMsg && arNavMsg.innerText !== "メインエントランスへ避難") {
+        arNavMsg.innerText = "メインエントランスへ避難";
+      }
+      if (arNavIcon && arNavIcon.style.display !== 'none') {
+        arNavIcon.style.display = 'none';
+      }
+      if (arNavBadge && arNavBadge.innerText !== "NAVI OFF") {
+        arNavBadge.innerText = "NAVI OFF";
+      }
+
+      // 1F メインエントランス ゴール判定（緑色サークルの半径2.0mと一致）
+      if (goalDist <= 2.0 && posY <= -2.5) {
+        const finalElapsed = startTime ? ((Date.now() - startTime) / 1000).toFixed(1) : "0.0";
+        const finalStopped = (totalStoppedTimeMs / 1000).toFixed(1);
+        showResult(finalElapsed, usedRouteB, finalStopped);
+      }
+    }
+  };
+
+  requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
